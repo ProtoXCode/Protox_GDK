@@ -206,5 +206,6 @@ marimo/_static/
 marimo/_lsp/
 __marimo__/
 
-# GDK
+# ProtoX_GDK
 logs/
+gdk/config.json
