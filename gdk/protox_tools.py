@@ -34,13 +34,14 @@ class ProtoXToolKit:
         """
 
         # noinspection PyUnusedLocal
-        def _show_tip(event=None) -> None:
-            if _show_tip.tip_window or not text:
+        def show_tip(event=None) -> None:
+            if show_tip.tip_window or not text:
                 return
+            # noinspection PyTypeChecker
             x, y, _, _ = widget.bbox('insert')
             x += widget.winfo_rootx() + 65
             y += widget.winfo_rooty()
-            _show_tip.tip_window = tw = tk.Toplevel(widget)
+            show_tip.tip_window = tw = tk.Toplevel(widget)
             tw.wm_overrideredirect(True)
             tw.wm_geometry(f'+{x}+{y}')
 
@@ -58,13 +59,13 @@ class ProtoXToolKit:
             label.pack(ipadx=5)
 
         # noinspection PyUnusedLocal
-        def _hide_tip(event=None) -> None:
-            if _show_tip.tip_window:
-                _show_tip.tip_window.destroy()
-                _show_tip.tip_window = None
+        def hide_tip(event=None) -> None:
+            if show_tip.tip_window:
+                show_tip.tip_window.destroy()
+                show_tip.tip_window = None
 
         # Initialize tip_window attribute to avoid AttributeError
-        _show_tip.tip_window = None
+        show_tip.tip_window = None
 
-        widget.bind('<Enter>', _show_tip)
-        widget.bind('<Leave>', _hide_tip)
+        widget.bind('<Enter>', show_tip)
+        widget.bind('<Leave>', hide_tip)
