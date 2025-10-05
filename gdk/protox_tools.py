@@ -1,5 +1,7 @@
-import tkinter as tk
 from typing import Any
+
+import tkinter as tk
+from PIL import Image, ImageDraw
 
 
 class ProtoXToolKit:
@@ -69,3 +71,20 @@ class ProtoXToolKit:
 
         widget.bind('<Enter>', show_tip)
         widget.bind('<Leave>', hide_tip)
+
+    @staticmethod
+    def round_corners(image: Image.Image, radius: int) -> Image.Image:
+        """Return an image with rounded corners."""
+
+        image = image.convert("RGBA")
+
+        # Create a mask with rounded rectangle
+        mask = Image.new("L", image.size, 0)
+        draw = ImageDraw.Draw(mask)
+        draw.rounded_rectangle(
+            (0, 0, image.width, image.height), radius=radius, fill=255)
+
+        # Apply the mask to the image
+        rounded = image.copy()
+        rounded.putalpha(mask)
+        return rounded
