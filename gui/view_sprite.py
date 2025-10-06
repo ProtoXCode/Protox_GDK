@@ -1,7 +1,474 @@
+from __future__ import annotations
+
+import json
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Optional
+from tkinter.filedialog import askopenfilename, asksaveasfilename
+from functools import partial
+
 import customtkinter as ctk
+from PIL import Image
+from PIL.Image import Resampling
+
+
+# --- Data model --------------------------------------------------------------
+
+@dataclass
+class SpriteFrame:
+    # 2D matrix: int palette index or -1 for transparent
+    pixels: list[list[int]]
+
+
+@dataclass
+class SpriteDoc:
+    width: int
+    height: int
+    palette: list[list[int]]
+    frames: list[SpriteFrame]
+    name: str = 'unnamed'
+
+    @staticmethod
+    def empty(width: int, height: int, palette: list[list[int]],
+              name: str = 'unnamed') -> 'SpriteDoc':
+        blank = [[-1 for _ in range(width)] for _ in range(height)]
+        return SpriteDoc(width=width, height=height, palette=palette,
+                         frames=[SpriteFrame(blank)], name=name)
+
+    def to_json(self) -> dict:
+        return {
+            'name': self.name,
+            'width': self.width,
+            'height': self.height,
+            'palette': self.palette,
+            'frames': [f.pixels for f in self.frames]
+        }
+
+    @staticmethod
+    def from_json(d: dict) -> 'SpriteDoc':
+        return SpriteDoc(
+            name=d.get('name', 'unnamed'),
+            width=int(d['width']),
+            height=int(d['height']),
+            palette=[list(map(int, rgba)) for rgba in d['palette']],
+            frames=[SpriteFrame(
+                [[int(v) for v in row] for row in m]) for m in d['frames']]
+        )
+
+
+# --- Editor widget -----------------------------------------------------------
+
 
 class SpriteEditor(ctk.CTkFrame):
+    """
+    A minimum-but-useful pixel editor:
+
+     - Grid painting with a tiny palette (RGBA).
+     - Multiple frames (add/duplicate/delete).
+     - Save/Load JSON (`SpriteDoc` format).
+     - PNG export (uses current frame + palette).
+    """
+
     def __init__(self, parent):
         super().__init__(parent)
-        ctk.CTkLabel(self, text='Sprite Editor').grid(padx=20, pady=20)
-        ctk.CTkButton(self, text="Button").grid(pady=10)
+        self.padding = 10
+        self.cell_px = 22  # Canvas pixels per cell
+        self.grid_color = '#444444'
+
+        # Default palette (Amiga-ish)
+        self.default_palette = [
+            [0, 0, 0, 0],  # transparent
+            [0, 0, 0, 255],  # black
+            [255, 255, 255, 255],  # white
+            [206, 28, 36, 255],  # red
+            [255, 163, 0, 255],  # orange
+            [255, 236, 39, 255],  # yellow
+            [0, 163, 104, 255],  # green
+            [0, 121, 241, 255],  # blue
+            [134, 120, 252, 255],  # violet
+            [244, 0, 161, 255],  # magenta
+            [143, 86, 59, 255],  # brown
+            [99, 155, 255, 255],  # sky
+            [118, 66, 138, 255],  # purple
+            [233, 233, 233, 255],  # light gray
+            [128, 128, 128, 255],  # gray
+            [33, 33, 33, 255]  # near black
+        ]
+
+        # State
+        self.doc: SpriteDoc = SpriteDoc.empty(
+            width=16, height=16, palette=self.default_palette, name='sprite')
+        self.active_frame = 0
+        self.active_color_index = 1  # Default: black
+        self.onion_skin = ctk.BooleanVar(value=False)
+        self.last_saved_path: Optional[Path] = None
+
+        # Layout: left (tools) | center (canvas) | right (frames/preview)
+        self.columnconfigure(1, weight=1)
+        self.rowconfigure(1, weight=1)
+
+        self._build_toolbar()
+        self._build_palette()
+        self._build_canvas()
+        self._build_frames_panel()
+        self._refresh_all()
+
+    # --- UI Builder --------------------------------------------------------------
+
+    def _build_toolbar(self):
+        bar = ctk.CTkFrame(self)
+        bar.grid(row=0, column=0, columnspan=3, sticky='ew',
+                 padx=self.padding, pady=(self.padding, 0))
+        bar.grid_columnconfigure(10, weight=1)
+
+        ctk.CTkLabel(
+            bar, text='Sprite Editor', font=('Segoe UI', 16, 'bold')).grid(
+            row=0, column=0, padx=8, pady=8)
+
+        ctk.CTkButton(bar, text='New', command=self._new_doc).grid(
+            row=0, column=1, padx=4, pady=4)
+        ctk.CTkButton(bar, text='Open', command=self._open_doc).grid(
+            row=0, column=2, padx=4)
+        ctk.CTkButton(bar, text='Save', command=self._save_doc).grid(
+            row=0, column=3, padx=4)
+        ctk.CTkButton(bar, text='Save as', command=self._save_as_doc).grid(
+            row=0, column=4, padx=4)
+        ctk.CTkButton(bar, text='Export PNG', command=self._export_png).grid(
+            row=0, column=5, padx=4)
+
+        ctk.CTkSwitch(bar, text='Onion skin', variable=self.onion_skin,
+                      command=self._redraw_canvas).grid(
+            row=0, column=7, padx=12)
+
+        # Size quick-picks
+        size_box = ctk.CTkFrame(bar)
+        size_box.grid(row=0, column=9, padx=8)
+        ctk.CTkLabel(size_box, text='Grid:').grid(row=0, column=0, padx=(4, 2))
+        for i, (w, h) in enumerate([(8, 8), (16, 16), (24, 24), (32, 32)]):
+            cmd = partial(self._resize_grid, w, h)
+            ctk.CTkButton(size_box, text=f'{w}x{h}', width=56,
+                          command=cmd).grid(row=0, column=i + 1, padx=2)
+
+    def _build_palette(self):
+        box = ctk.CTkFrame(self)
+        box.grid(row=1, column=0, sticky='nsew',
+                 padx=self.padding, pady=self.padding)
+        ctk.CTkLabel(box, text='Palette:').grid(padx=8, pady=(8, 4))
+
+        self.palette_buttons: list[ctk.CTkButton] = []
+
+        for i, rgba in enumerate(self.doc.palette):
+            cmd = partial(self._select_color, i)
+            btn = ctk.CTkButton(box, text=str(i), width=36, height=28,
+                                fg_color=_rgba_hex(rgba), command=cmd)
+            btn.grid(padx=6, pady=4, sticky='ew')
+            self.palette_buttons.append(btn)
+
+        # Eraser sets transparent (-1)
+        ctk.CTkButton(
+            box, text='Eraser', width=36, height=28, fg_color='black',
+            command=lambda: self._select_color(-1)).grid(
+            padx=6, pady=(8, 12), sticky='ew')
+
+        # Cell pixel size slider
+        ctk.CTkLabel(box, text='Zoom').grid(padx=8, pady=(6, 0))
+        self.zoom = ctk.CTkSlider(box, from_=10, to=40, number_of_steps=15,
+                                  command=self._zoom_changed)
+        self.zoom.set(self.cell_px)
+        self.zoom.grid(padx=12, pady=(0, 10))
+
+    def _build_canvas(self):
+        center = ctk.CTkFrame(self)
+        center.grid(row=1, column=1, sticky='nsew',
+                    padx=(0, self.padding), pady=self.padding)
+        center.rowconfigure(0, weight=1)
+        center.columnconfigure(0, weight=1)
+
+        self.canvas = ctk.CTkCanvas(center, bg='#1a1a1a', highlightthickness=0)
+        self.canvas.grid(sticky='nsew')
+
+        self.canvas.bind('<Button-1>', self._paint_at)
+        self.canvas.bind('<B1-Motion>', self._paint_at)
+        self.canvas.bind('<Button-3>', self._eyedrop_at)
+
+    def _build_frames_panel(self):
+        right = ctk.CTkFrame(self)
+        right.grid(row=1, column=2, sticky='ns',
+                   padx=(0, self.padding), pady=self.padding)
+
+        header = ctk.CTkLabel(right, text='Frames')
+        header.grid(padx=8, pady=(8, 0))
+
+        strip = ctk.CTkFrame(right)
+        strip.grid(padx=8, pady=8, sticky='n')
+        self.frame_buttons: list[ctk.CTkButton] = []
+        self.frames_strip = strip
+
+        # Actions
+        row2 = ctk.CTkFrame(right)
+        row2.grid(padx=8, pady=(0, 8))
+        ctk.CTkButton(row2, text='+ New', width=70,
+                      command=self._add_frame).grid(
+            row=0, column=0, padx=2, pady=2)
+        ctk.CTkButton(row2, text='Duplicate', width=70,
+                      command=self._dup_frame).grid(
+            row=0, column=1, padx=2, pady=2)
+        ctk.CTkButton(row2, text='Delete', width=70,
+                      command=self._delete_frame).grid(
+            row=0, column=2, padx=2, pady=2)
+
+        # Tiny preview
+        ctk.CTkLabel(right, text='Preview').grid(padx=8, pady=(10, 0))
+        self.preview_label = ctk.CTkLabel(right, text='')
+        self.preview_label.grid(padx=8, pady=(0, 8))
+
+        # Play controls
+        play_box = ctk.CTkFrame(right)
+        play_box.grid(padx=8, pady=(0, 12))
+        ctk.CTkButton(play_box, text='⏵ Play', width=60,
+                      command=self._play_once).grid(row=0, column=0, padx=2)
+        ctk.CTkButton(play_box, text='⟲ Clear', width=60,
+                      command=self._clear_frame).grid(row=0, column=1, padx=2)
+
+    # --- Actions -----------------------------------------------------------------
+
+    def _refresh_all(self) -> None:
+        self._rebuild_frames_strip()
+        self._redraw_canvas()
+        self._update_preview()
+
+    def _rebuild_frames_strip(self) -> None:
+        for b in self.frame_buttons:
+            b.destroy()
+        self.frame_buttons.clear()
+
+        for idx, _ in enumerate(self.doc.frames):
+            def switch(i=idx) -> None:
+                self.active_frame = i
+                self._redraw_canvas()
+                self._update_preview()
+                self._rebuild_frames_strip()
+
+            label = f'[{idx}]'
+            btn = ctk.CTkButton(
+                self.frames_strip, text=label, width=60, command=switch)
+            if idx == self.active_frame:
+                btn.configure(fg_color='#2255aa')
+            btn.grid(padx=2, pady=2)
+            self.frame_buttons.append(btn)
+
+    def _redraw_canvas(self, *_) -> None:
+        w = self.doc.width * self.cell_px
+        h = self.doc.height * self.cell_px
+        self.canvas.configure(width=w, height=h)
+        self.canvas.delete('all')
+
+        # Draw onion (previous frame) faint
+        if self.onion_skin.get() and self.active_frame > 0:
+            prev = self.doc.frames[self.active_frame - 1].pixels
+            self._draw_matrix(prev, alpha=90)
+
+        # Draw current frame
+        matrix = self.doc.frames[self.active_frame].pixels
+        self._draw_matrix(matrix, alpha=255)
+
+        # Grid overlay
+        for y in range(self.doc.height + 1):
+            self.canvas.create_line(0, y * self.cell_px, w, y * self.cell_px,
+                                    fill=self.grid_color)
+        for x in range(self.doc.width + 1):
+            self.canvas.create_line(x * self.cell_px, 0, x * self.cell_px, h,
+                                    fill=self.grid_color)
+
+    def _draw_matrix(self, matrix: list[list[int]], alpha: int) -> None:
+        for y, row in enumerate(matrix):
+            for x, idx in enumerate(row):
+                if idx < 0:
+                    continue
+                rgba = self.doc.palette[idx]
+                fill = _rgba_hex(
+                    [rgba[0], rgba[1], rgba[2], min(alpha, rgba[3])])
+                self.canvas.create_rectangle(
+                    x * self.cell_px + 1, y * self.cell_px + 1,
+                    (x + 1) * self.cell_px - 1, (y + 1) * self.cell_px - 1,
+                    outline='', fill=fill
+                )
+
+    def _update_preview(self) -> None:
+        """ Render current frame to a small PIL image and thumbnail it """
+        img = self._render_frame(self.active_frame, scale=1)
+        if img.width < 1 or img.height < 1:
+            return
+        preview = img.resize((
+            img.width * 4, img.height * 4), Resampling.NEAREST)
+        self._preview_photo = ctk.CTkImage(
+            light_image=preview,
+            dark_image=preview,
+            size=(img.width * 4, img.height * 4))
+        self.preview_label.configure(image=self._preview_photo)
+
+    def _paint_at(self, event) -> None:
+        x = int(event.x // self.cell_px)
+        y = int(event.y // self.cell_px)
+        if not (0 <= x < self.doc.width and 0 <= y < self.doc.height):
+            return
+        matrix = self.doc.frames[self.active_frame].pixels
+        matrix[y][x] = self.active_color_index
+        self._redraw_canvas()
+        self._update_preview()
+
+    def _eyedrop_at(self, event) -> None:
+        x = int(event.x // self.cell_px)
+        y = int(event.y // self.cell_px)
+        if not (0 <= x < self.doc.width and 0 <= y < self.doc.height):
+            return
+        idx = self.doc.frames[self.active_frame].pixels[y][x]
+        self._select_color(idx)
+
+    def _select_color(self, idx: int) -> None:
+        self.active_color_index = idx
+
+    def _zoom_changed(self, value) -> None:
+        self.cell_px = int(float(value))
+        self._redraw_canvas()
+
+    def _add_frame(self) -> None:
+        blank = [[-1 for _ in range(self.doc.width)] for _ in
+                 range(self.doc.height)]
+        self.doc.frames.append(SpriteFrame(blank))
+        self.active_frame = len(self.doc.frames) - 1
+        self._refresh_all()
+
+    def _dup_frame(self) -> None:
+        src = self.doc.frames[self.active_frame].pixels
+        dup = [row[:] for row in src]
+        self.doc.frames.append(SpriteFrame(dup))
+        self.active_frame = len(self.doc.frames) - 1
+        self._refresh_all()
+
+    def _delete_frame(self) -> None:
+        if len(self.doc.frames) <= 1:
+            return
+        del self.doc.frames[self.active_frame]
+        self.active_frame = max(0, self.active_frame - 1)
+        self._refresh_all()
+
+    def _clear_frame(self) -> None:
+        self.doc.frames[self.active_frame].pixels = [
+            [-1 for _ in range(self.doc.width)] for _ in
+            range(self.doc.height)]
+        self._refresh_all()
+
+    def _resize_grid(self, w: int, h: int) -> None:
+        """ Safe resize while keeping content where it fits (top-left) """
+        new_frames: list[SpriteFrame] = []
+        for frame in self.doc.frames:
+            new = [[-1 for _ in range(w)] for _ in range(h)]
+            for y in range(min(h, self.doc.height)):
+                row = frame.pixels[y]
+                for x in range(min(w, self.doc.width)):
+                    new[y][x] = row[x]
+            new_frames.append(SpriteFrame(new))
+        self.doc.width, self.doc.height = w, h
+        self.doc.frames = new_frames
+        self._refresh_all()
+
+    # --- File I/O ----------------------------------------------------------------
+
+    def _new_doc(self) -> None:
+        self.doc = SpriteDoc.empty(16, 16, self.default_palette, name='sprite')
+        self.active_frame = 0
+        self.last_saved_path = None
+        self._refresh_all()
+
+    def _open_doc(self) -> None:
+        path = askopenfilename(
+            title='Open Sprite JSON',
+            filetypes=[('Sprite JSON', '*.json'), ('All Files', '*.*')])
+        if not path:
+            return
+
+        with open(path, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+        self.doc = SpriteDoc.from_json(data)
+        self.active_frame = 0
+        self.last_saved_path = Path(path)
+        self._refresh_all()
+
+    def _save_doc(self) -> None:
+        if self.last_saved_path is None:
+            self._save_as_doc()
+            return
+
+        with open(self.last_saved_path, 'w', encoding='utf-8') as f:
+            json.dump(self.doc.to_json(), f, indent=2)
+
+    def _save_as_doc(self) -> None:
+        path = asksaveasfilename(
+            title='Save Sprite JSON', defaultextension='.json',
+            filetypes=[('Sprite JSON', '*.json'), ('All Files', '*.*')])
+
+        if not path:
+            return
+
+        self.last_saved_path = Path(path)
+        self._save_doc()
+
+    def _export_png(self):
+        path = asksaveasfilename(
+            title='Export PNG (current frame)',
+            defaultextension='.png',
+            filetypes=[('PNG image', '*.png'), ('All Files', '*.*')])
+
+        if not path:
+            return
+
+        img = self._render_frame(self.active_frame, scale=1)
+        img.save(path, 'PNG')
+
+    def _render_frame(self, index: int, scale: int = 1) -> Image.Image:
+        """ Render a frame to a PIL image using the palette """
+        w, h = self.doc.width, self.doc.height
+        img = Image.new('RGBA', (w, h), (0, 0, 0, 0))
+        px = img.load()
+        mat = self.doc.frames[index].pixels
+        for y in range(h):
+            for x in range(w):
+                idx = mat[y][x]
+                if idx < 0:
+                    continue
+                r, g, b, a = self.doc.palette[idx]
+                px[x, y] = (int(r), int(g), int(b), int(a))
+        if scale > 1:
+            img = img.resize((w * scale, h * scale), Resampling.NEAREST)
+        return img
+
+    # --- Tiny one-shot animation preview (just flips frames once) ----------------
+
+    def _play_once(self) -> None:
+        """ Quick-and-dirty flip with a short delay """
+        if len(self.doc.frames) <= 1:
+            return
+        start = self.active_frame
+
+        def step(i=0) -> None:
+            self.active_frame = (start + i) % len(self.doc.frames)
+            self._redraw_canvas()
+            self._update_preview()
+            if i + 1 < len(self.doc.frames):
+                self.after(90, step, i + 1)
+            else:
+                self.active_frame = start
+                self._redraw_canvas()
+                self._update_preview()
+
+        step(0)
+
+
+# --- Helpers -----------------------------------------------------------------
+
+
+def _rgba_hex(rgba: list[int]) -> str:
+    """ CTk buttons accept #RRGGBB; we ignore alpha for the button swatch """
+    r, g, b, a = rgba
+    return f'#{r:02x}{g:02x}{b:02x}'
