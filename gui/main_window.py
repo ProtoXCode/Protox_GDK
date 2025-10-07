@@ -40,20 +40,13 @@ class GDKMain:
         ctk.set_appearance_mode('dark')
         ctk.set_appearance_mode('blue')
 
-        # --- Frames --- #
+        # --- Frames ----------------------------------------------------------
         self.top_menu = ctk.CTkFrame(
             self.root, width=self.menu_width,
             height=self.top_menu_height)
         self.top_menu.grid(row=0, column=0, sticky='nsew',
                            padx=self.padding, pady=self.padding)
         self.top_menu.grid_propagate(False)
-
-        self.sub_menu = ctk.CTkFrame(
-            self.root, width=self.menu_width,
-            height=self.app_height - self.padding * 4 - self.top_menu_height)
-        self.sub_menu.grid(row=1, column=0, sticky='nsew',
-                           padx=self.padding, pady=self.padding)
-        self.sub_menu.grid_propagate(False)
 
         self.window = ctk.CTkFrame(
             self.root,
@@ -66,7 +59,8 @@ class GDKMain:
 
         base_image = Image.open('assets/images/protox.png')
         rounded_image = ProtoXToolKit.round_corners(base_image, radius=15)
-        # --- Menu --- #
+
+        # --- Menu ------------------------------------------------------------
         self.logo_image = ctk.CTkImage(
             light_image=rounded_image,
             dark_image=rounded_image,
@@ -74,22 +68,17 @@ class GDKMain:
         self.label_logo = ctk.CTkLabel(
             self.top_menu, image=self.logo_image, text='')
         self.label_logo.grid(
-            row=0, column=0, pady=self.padding, padx=self.padding,
-            columnspan=2)
+            row=0, column=0, pady=self.padding, padx=self.padding)
 
-        self.button_sprite = ctk.CTkButton(
-            self.top_menu, text='Sprite', width=130,
-            command=self.sprite_editor)
-        self.button_sprite.grid(
-            row=1, column=0, padx=self.padding, pady=self.padding)
+        ctk.CTkButton(self.top_menu, text='Sprite', width=200, height=50,
+                      command=self.sprite_editor).grid(
+            row=1, column=0, pady=self.padding, padx=self.padding, )
 
-        self.button_level = ctk.CTkButton(
-            self.top_menu, text='Level', width=130,
-            command=self.level_editor)
-        self.button_level.grid(
-            row=1, column=1, padx=self.padding, pady=self.padding)
+        ctk.CTkButton(self.top_menu, text='Level', width=200, height=50,
+                      command=self.level_editor).grid(
+            row=2, column=0, padx=self.padding, pady=self.padding)
 
-        # --- Views --- #
+        # --- Views -----------------------------------------------------------
         self.views = {
             'sprite': SpriteEditor(self.window),
             'level': LevelEditor(self.window),
@@ -121,27 +110,15 @@ class GDKMain:
         else:
             self.root.attributes('-alpha', 1.0)
 
-    def clear_sub_menu(self) -> None:
-        """ Destroy all widgets in the sub_menu """
-        for widget in self.sub_menu.winfo_children():
-            widget.destroy()
+    # def clear_sub_menu(self) -> None:
+    #     """ Destroy all widgets in the sub_menu """
+    #     for widget in self.sub_menu.winfo_children():
+    #         widget.destroy()
 
     def sprite_editor(self) -> None:
         self.show_view('sprite')
-        self.clear_sub_menu()
-
-        sprite_button_load = ctk.CTkButton(
-            self.sub_menu, text='Load Sprite', width=130,
-            command=None)
-        sprite_button_load.grid(
-            row=0, column=0, padx=self.padding, pady=self.padding)
-
-        sprite_button_save = ctk.CTkButton(
-            self.sub_menu, text='Save sprite', width=130,
-            command=None)
-        sprite_button_save.grid(
-            row=0, column=1, padx=self.padding, pady=self.padding)
+        # self.clear_sub_menu()
 
     def level_editor(self) -> None:
         self.show_view('level')
-        self.clear_sub_menu()
+        # self.clear_sub_menu()

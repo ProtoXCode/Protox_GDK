@@ -10,6 +10,7 @@ from functools import partial
 import customtkinter as ctk
 from PIL import Image
 from PIL.Image import Resampling
+from gdk.palette import default_palette
 
 
 # --- Data model --------------------------------------------------------------
@@ -76,24 +77,7 @@ class SpriteEditor(ctk.CTkFrame):
         self.grid_color = '#444444'
 
         # Default palette (Amiga-ish)
-        self.default_palette = [
-            [0, 0, 0, 0],  # transparent
-            [0, 0, 0, 255],  # black
-            [255, 255, 255, 255],  # white
-            [206, 28, 36, 255],  # red
-            [255, 163, 0, 255],  # orange
-            [255, 236, 39, 255],  # yellow
-            [0, 163, 104, 255],  # green
-            [0, 121, 241, 255],  # blue
-            [134, 120, 252, 255],  # violet
-            [244, 0, 161, 255],  # magenta
-            [143, 86, 59, 255],  # brown
-            [99, 155, 255, 255],  # sky
-            [118, 66, 138, 255],  # purple
-            [233, 233, 233, 255],  # light gray
-            [128, 128, 128, 255],  # gray
-            [33, 33, 33, 255]  # near black
-        ]
+        self.default_palette = default_palette
 
         # State
         self.doc: SpriteDoc = SpriteDoc.empty(
@@ -113,7 +97,7 @@ class SpriteEditor(ctk.CTkFrame):
         self._build_frames_panel()
         self._refresh_all()
 
-    # --- UI Builder --------------------------------------------------------------
+    # --- UI Builder ----------------------------------------------------------
 
     def _build_toolbar(self):
         bar = ctk.CTkFrame(self)
@@ -149,28 +133,61 @@ class SpriteEditor(ctk.CTkFrame):
             ctk.CTkButton(size_box, text=f'{w}x{h}', width=56,
                           command=cmd).grid(row=0, column=i + 1, padx=2)
 
-    def _build_palette(self):
+    def _build_palette(self) -> None:
         box = ctk.CTkFrame(self)
-        box.grid(row=1, column=0, sticky='nsew',
-                 padx=self.padding, pady=self.padding)
-        ctk.CTkLabel(box, text='Palette:').grid(padx=8, pady=(8, 4))
+        box.grid(row=1, column=0, sticky='nsw', padx=self.padding,
+                 pady=self.padding)
+        ctk.CTkLabel(box, text='Palette').grid(padx=8, pady=(8, 4))
 
         self.palette_buttons: list[ctk.CTkButton] = []
 
+        # --- grid of color buttons ---
+        grid_frame = ctk.CTkFrame(box)
+        grid_frame.grid(padx=6, pady=4)
+
+        cols = 8  # how many buttons per row
+        btn_size = 30
+
         for i, rgba in enumerate(self.doc.palette):
-            cmd = partial(self._select_color, i)
-            btn = ctk.CTkButton(box, text=str(i), width=36, height=28,
-                                fg_color=_rgba_hex(rgba), command=cmd)
-            btn.grid(padx=6, pady=4, sticky='ew')
+            btn = ctk.CTkButton(
+                grid_frame,
+                text='',
+                width=btn_size,
+                height=btn_size,
+                fg_color=_rgba_hex(rgba),
+                corner_radius=4,
+                border_width=2,
+                border_color='#222',
+                command=lambda i=i: self._select_color(i)
+            )
+            r, c = divmod(i, cols)
+            btn.grid(row=r, column=c, padx=3, pady=3)
             self.palette_buttons.append(btn)
 
-        # Eraser sets transparent (-1)
-        ctk.CTkButton(
-            box, text='Eraser', width=36, height=28, fg_color='black',
-            command=lambda: self._select_color(-1)).grid(
-            padx=6, pady=(8, 12), sticky='ew')
+        # --- special tools row ---
+        special_frame = ctk.CTkFrame(box)
+        special_frame.grid(padx=8, pady=(10, 8), sticky='ew')
 
-        # Cell pixel size slider
+        ctk.CTkButton(
+            special_frame,
+            text='Transparent',
+            width=90,
+            height=28,
+            fg_color='#000000',
+            command=lambda: self._select_color(0)
+            # assuming palette[0] = transparent
+        ).grid(row=0, column=0, padx=4, pady=4)
+
+        ctk.CTkButton(
+            special_frame,
+            text='Eraser',
+            width=70,
+            height=28,
+            fg_color='#1a1a1a',
+            command=lambda: self._select_color(-1)
+        ).grid(row=0, column=1, padx=4, pady=4)
+
+        # zoom slider below
         ctk.CTkLabel(box, text='Zoom').grid(padx=8, pady=(6, 0))
         self.zoom = ctk.CTkSlider(box, from_=10, to=40, number_of_steps=15,
                                   command=self._zoom_changed)
@@ -230,7 +247,7 @@ class SpriteEditor(ctk.CTkFrame):
         ctk.CTkButton(play_box, text='⟲ Clear', width=60,
                       command=self._clear_frame).grid(row=0, column=1, padx=2)
 
-    # --- Actions -----------------------------------------------------------------
+    # --- Actions -------------------------------------------------------------
 
     def _refresh_all(self) -> None:
         self._rebuild_frames_strip()
@@ -327,6 +344,11 @@ class SpriteEditor(ctk.CTkFrame):
 
     def _select_color(self, idx: int) -> None:
         self.active_color_index = idx
+        for i, btn in enumerate(self.palette_buttons):
+            if i == idx:
+                btn.configure(border_color='#ffffff', border_width=3)
+            else:
+                btn.configure(border_color='#222', border_width=2)
 
     def _zoom_changed(self, value) -> None:
         self.cell_px = int(float(value))
@@ -373,7 +395,7 @@ class SpriteEditor(ctk.CTkFrame):
         self.doc.frames = new_frames
         self._refresh_all()
 
-    # --- File I/O ----------------------------------------------------------------
+    # --- File I/O ------------------------------------------------------------
 
     def _new_doc(self) -> None:
         self.doc = SpriteDoc.empty(16, 16, self.default_palette, name='sprite')
@@ -443,7 +465,7 @@ class SpriteEditor(ctk.CTkFrame):
             img = img.resize((w * scale, h * scale), Resampling.NEAREST)
         return img
 
-    # --- Tiny one-shot animation preview (just flips frames once) ----------------
+    # --- Tiny one-shot animation preview (just flips frames once) ------------
 
     def _play_once(self) -> None:
         """ Quick-and-dirty flip with a short delay """
