@@ -8,7 +8,7 @@ from tkinter.filedialog import askopenfilename, asksaveasfilename
 from functools import partial
 
 import customtkinter as ctk
-from PIL import Image
+from PIL import Image, ImageTk
 from PIL.Image import Resampling
 from gdk.palette import default_palette
 
@@ -162,7 +162,7 @@ class SpriteEditor(ctk.CTkFrame):
                 corner_radius=4,
                 border_width=2,
                 border_color='#222',
-                command=lambda i=i: self._select_color(i)
+                command=lambda color=i: self._select_color(color)
             )
             r, c = divmod(i, cols)
             btn.grid(row=r, column=c, padx=3, pady=3)
@@ -216,6 +216,8 @@ class SpriteEditor(ctk.CTkFrame):
             center, bg="#1a1a1a", highlightthickness=0,
             xscrollcommand=x_scroll.set, yscrollcommand=y_scroll.set)
         self.canvas.grid(row=0, column=0, sticky="nsew")
+
+        self.canvas_img_id = self.canvas.create_image(0, 0, anchor='nw')
 
         # connect scrollbars
         x_scroll.configure(command=self.canvas.xview)
@@ -307,10 +309,12 @@ class SpriteEditor(ctk.CTkFrame):
             self.frame_buttons.append(btn)
 
     def _redraw_canvas(self, *_) -> None:
+        if not hasattr(self, 'canvas_img_id'):
+            self.canvas_img_id = self.canvas.create_image(0, 0, anchor='nw')
         w = self.doc.width * self.cell_px
         h = self.doc.height * self.cell_px
         self.canvas.configure(width=w, height=h)
-        self.canvas.delete('all')
+        self.canvas.delete('grid')
 
         # Draw onion (previous frame) faint
         if self.onion_skin.get() and self.active_frame > 0:
@@ -323,27 +327,56 @@ class SpriteEditor(ctk.CTkFrame):
 
         # Grid overlay
         for y in range(self.doc.height + 1):
-            self.canvas.create_line(0, y * self.cell_px, w, y * self.cell_px,
-                                    fill=self.grid_color)
+            self.canvas.create_line(
+                0, y * self.cell_px, w, y * self.cell_px,
+                fill=self.grid_color, tags='grid'
+            )
         for x in range(self.doc.width + 1):
-            self.canvas.create_line(x * self.cell_px, 0, x * self.cell_px, h,
-                                    fill=self.grid_color)
+            self.canvas.create_line(
+                x * self.cell_px, 0, x * self.cell_px, h,
+                fill=self.grid_color, tags='grid'
+            )
 
         self.canvas.configure(scrollregion=(0, 0, w, h))
 
     def _draw_matrix(self, matrix: list[list[int]], alpha: int) -> None:
-        for y, row in enumerate(matrix):
+        h, w = len(matrix), len(matrix[0])
+
+        # render current (and optional onion skin) into ONE image
+        base = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+        px = base.load()
+
+        # onion skin (previous frame) faint
+        if self.onion_skin.get() and self.active_frame > 0 and alpha == 255:
+            prev = self.doc.frames[self.active_frame - 1].pixels
+            for y in range(h):
+                prow = prev[y]
+                for x, idx in enumerate(prow):
+                    if idx < 0:
+                        continue
+                    r, g, b, a = self.doc.palette[idx]
+                    px[x, y] = (r, g, b, 90)  # ghost alpha
+
+        # current frame
+        for y in range(h):
+            row = matrix[y]
             for x, idx in enumerate(row):
                 if idx < 0:
                     continue
-                rgba = self.doc.palette[idx]
-                fill = _rgba_hex(
-                    [rgba[0], rgba[1], rgba[2], min(alpha, rgba[3])])
-                self.canvas.create_rectangle(
-                    x * self.cell_px + 1, y * self.cell_px + 1,
-                    (x + 1) * self.cell_px - 1, (y + 1) * self.cell_px - 1,
-                    outline='', fill=fill
-                )
+                r, g, b, a = self.doc.palette[idx]
+                px[x, y] = (r, g, b, a)
+
+        # scale for zoom
+        if self.cell_px != 1:
+            base = base.resize((w * self.cell_px, h * self.cell_px),
+                               Resampling.NEAREST)
+
+        # store & reuse PhotoImage
+        self._canvas_img = ImageTk.PhotoImage(base)
+        self.canvas.itemconfig(self.canvas_img_id, image=self._canvas_img)
+
+        # update scroll bounds
+        self.canvas.configure(scrollregion=(0, 0, base.width, base.height))
 
     def _update_preview(self) -> None:
         """ Render current frame to a small PIL image and thumbnail it """
@@ -364,19 +397,27 @@ class SpriteEditor(ctk.CTkFrame):
 
         self.preview_label.configure(image=self._preview_photo)
 
+    def _event_to_cell(self, event) -> tuple[int, int]:
+        cx = self.canvas.canvasx(event.x)
+        cy = self.canvas.canvasy(event.y)
+        x = int(cx // self.cell_px)
+        y = int(cy // self.cell_px)
+        return x, y
+
     def _paint_at(self, event) -> None:
-        x = int(event.x // self.cell_px)
-        y = int(event.y // self.cell_px)
+        x, y = self._event_to_cell(event)
         if not (0 <= x < self.doc.width and 0 <= y < self.doc.height):
             return
-        matrix = self.doc.frames[self.active_frame].pixels
-        matrix[y][x] = self.active_color_index
+        mat = self.doc.frames[self.active_frame].pixels
+        if mat[y][x] == self.active_color_index:
+            return
+        mat[y][x] = self.active_color_index
+        # re-render image (fast now)
         self._redraw_canvas()
         self._update_preview()
 
     def _eyedrop_at(self, event) -> None:
-        x = int(event.x // self.cell_px)
-        y = int(event.y // self.cell_px)
+        x, y = self._event_to_cell(event)
         if not (0 <= x < self.doc.width and 0 <= y < self.doc.height):
             return
         idx = self.doc.frames[self.active_frame].pixels[y][x]
