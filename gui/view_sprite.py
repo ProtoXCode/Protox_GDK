@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Any
 from tkinter.filedialog import askopenfilename, asksaveasfilename
 from functools import partial
 
@@ -75,6 +75,7 @@ class SpriteEditor(ctk.CTkFrame):
         self.padding = 10
         self.cell_px = 22  # Canvas pixels per cell
         self.grid_color = '#444444'
+        self.btn_bar_width = 30
 
         # Default palette (Amiga-ish)
         self.default_palette = default_palette
@@ -109,16 +110,19 @@ class SpriteEditor(ctk.CTkFrame):
             bar, text='Sprite Editor', font=('Segoe UI', 16, 'bold')).grid(
             row=0, column=0, padx=8, pady=8)
 
-        ctk.CTkButton(bar, text='New', command=self._new_doc).grid(
+        ctk.CTkButton(bar, text='New', width=self.btn_bar_width,
+                      command=self._new_doc).grid(
             row=0, column=1, padx=4, pady=4)
-        ctk.CTkButton(bar, text='Open', command=self._open_doc).grid(
-            row=0, column=2, padx=4)
-        ctk.CTkButton(bar, text='Save', command=self._save_doc).grid(
-            row=0, column=3, padx=4)
-        ctk.CTkButton(bar, text='Save as', command=self._save_as_doc).grid(
-            row=0, column=4, padx=4)
-        ctk.CTkButton(bar, text='Export PNG', command=self._export_png).grid(
-            row=0, column=5, padx=4)
+        ctk.CTkButton(bar, text='Open', width=self.btn_bar_width,
+                      command=self._open_doc).grid(row=0, column=2, padx=4)
+        ctk.CTkButton(bar, text='Save', width=self.btn_bar_width,
+                      command=self._save_doc).grid(row=0, column=3, padx=4)
+        ctk.CTkButton(bar, text='Save as', width=self.btn_bar_width,
+                      command=self._save_as_doc).grid(row=0, column=4, padx=4)
+        ctk.CTkButton(bar, text='Export PNG', width=self.btn_bar_width,
+                      command=self._export_png).grid(row=0, column=5, padx=4)
+        ctk.CTkButton(bar, text='Import', width=self.btn_bar_width,
+                      command=self._import_image).grid(row=0, column=6, padx=4)
 
         ctk.CTkSwitch(bar, text='Onion skin', variable=self.onion_skin,
                       command=self._redraw_canvas).grid(
@@ -194,21 +198,49 @@ class SpriteEditor(ctk.CTkFrame):
         self.zoom.set(self.cell_px)
         self.zoom.grid(padx=12, pady=(0, 10))
 
-    def _build_canvas(self):
+    def _build_canvas(self) -> None:
         center = ctk.CTkFrame(self)
-        center.grid(row=1, column=1, sticky='nsew',
+        center.grid(row=1, column=1, sticky="nsew",
                     padx=(0, self.padding), pady=self.padding)
         center.rowconfigure(0, weight=1)
         center.columnconfigure(0, weight=1)
 
-        self.canvas = ctk.CTkCanvas(center, bg='#1a1a1a', highlightthickness=0)
-        self.canvas.grid(sticky='nsew')
+        # --- add scrollbars ---
+        x_scroll = ctk.CTkScrollbar(center, orientation="horizontal")
+        y_scroll = ctk.CTkScrollbar(center, orientation="vertical")
+        x_scroll.grid(row=1, column=0, sticky="ew")
+        y_scroll.grid(row=0, column=1, sticky="ns")
 
-        self.canvas.bind('<Button-1>', self._paint_at)
-        self.canvas.bind('<B1-Motion>', self._paint_at)
-        self.canvas.bind('<Button-3>', self._eyedrop_at)
+        # --- scrollable canvas ---
+        self.canvas = ctk.CTkCanvas(
+            center, bg="#1a1a1a", highlightthickness=0,
+            xscrollcommand=x_scroll.set, yscrollcommand=y_scroll.set)
+        self.canvas.grid(row=0, column=0, sticky="nsew")
 
-    def _build_frames_panel(self):
+        # connect scrollbars
+        x_scroll.configure(command=self.canvas.xview)
+        y_scroll.configure(command=self.canvas.yview)
+
+        def _on_mouse_wheel(event) -> None:
+            self.canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+
+        self.canvas.bind_all("<MouseWheel>", _on_mouse_wheel)
+
+        def _start_pan(event) -> None:
+            self.canvas.scan_mark(event.x, event.y)
+
+        def _do_pan(event) -> None:
+            self.canvas.scan_dragto(event.x, event.y, gain=1)
+
+        self.canvas.bind("<ButtonPress-2>", _start_pan)
+        self.canvas.bind("<B2-Motion>", _do_pan)
+
+        # --- painting/eyedropper ---
+        self.canvas.bind("<Button-1>", self._paint_at)
+        self.canvas.bind("<B1-Motion>", self._paint_at)
+        self.canvas.bind("<Button-3>", self._eyedrop_at)
+
+    def _build_frames_panel(self) -> None:
         right = ctk.CTkFrame(self)
         right.grid(row=1, column=2, sticky='ns',
                    padx=(0, self.padding), pady=self.padding)
@@ -297,6 +329,8 @@ class SpriteEditor(ctk.CTkFrame):
             self.canvas.create_line(x * self.cell_px, 0, x * self.cell_px, h,
                                     fill=self.grid_color)
 
+        self.canvas.configure(scrollregion=(0, 0, w, h))
+
     def _draw_matrix(self, matrix: list[list[int]], alpha: int) -> None:
         for y, row in enumerate(matrix):
             for x, idx in enumerate(row):
@@ -316,12 +350,18 @@ class SpriteEditor(ctk.CTkFrame):
         img = self._render_frame(self.active_frame, scale=1)
         if img.width < 1 or img.height < 1:
             return
-        preview = img.resize((
-            img.width * 4, img.height * 4), Resampling.NEAREST)
+
+        max_size = 256  # max width or height in pixels (scaled)
+        scale = min(4, int(max_size / max(img.width, img.height)))
+        preview = img.resize(
+            (int(img.width * scale), int(img.height * scale)),
+            Resampling.NEAREST)
+
         self._preview_photo = ctk.CTkImage(
             light_image=preview,
             dark_image=preview,
-            size=(img.width * 4, img.height * 4))
+            size=(preview.width, preview.height))
+
         self.preview_label.configure(image=self._preview_photo)
 
     def _paint_at(self, event) -> None:
@@ -464,6 +504,45 @@ class SpriteEditor(ctk.CTkFrame):
         if scale > 1:
             img = img.resize((w * scale, h * scale), Resampling.NEAREST)
         return img
+
+    def _import_image(self):
+        path = askopenfilename(
+            title='Import sprite image',
+            filetypes=[('Image files', '*.png;*.jpg;*.jpeg;*.bmp'),
+                       ('All Files', '*.*')])
+        if not path:
+            return
+
+        img = Image.open(path).convert('RGBA')
+        w, h = img.size
+        self._resize_grid(w, h)
+
+        px = img.load()
+        matrix = [[-1 for _ in range(w)] for _ in range(h)]
+
+        for y in range(h):
+            for x in range(w):
+                r, g, b, a = px[x, y]
+                if a < 32:  # transparent
+                    matrix[y][x] = -1
+                    continue
+                matrix[y][x] = self._find_closest_color((r, g, b, a))
+
+        self.doc.frames[self.active_frame].pixels = matrix
+        self._refresh_all()
+
+    def _find_closest_color(self, rgba: tuple[Any, ...]) -> int:
+        """ Find the closest color to rgba """
+        r1, g1, b1, a1 = rgba
+        best_idx = 0
+        best_dist = float('inf')
+        for i, (r2, g2, b2, a2) in enumerate(self.doc.palette):
+            dr, dg, db = r1 - r2, g1 - g2, b1 - b2
+            dist = dr * dr + dg * dg + db * db
+            if dist < best_dist:
+                best_idx = i
+                best_dist = dist
+        return best_idx
 
     # --- Tiny one-shot animation preview (just flips frames once) ------------
 

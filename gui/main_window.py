@@ -12,10 +12,9 @@ from gui.view_level import LevelEditor
 from gui.view_splash import SplashScreen
 
 
-class GDKMain:
+class GDKMain():
     def __init__(self, root) -> None:
         """ GDK """
-
         self.root = root
         self.config = load_config()
         self.padding = 10
@@ -109,11 +108,6 @@ class GDKMain:
             self.root.after(ms, self.fade_in, alpha + 0.05)
         else:
             self.root.attributes('-alpha', 1.0)
-
-    # def clear_sub_menu(self) -> None:
-    #     """ Destroy all widgets in the sub_menu """
-    #     for widget in self.sub_menu.winfo_children():
-    #         widget.destroy()
 
     def sprite_editor(self) -> None:
         self.show_view('sprite')
