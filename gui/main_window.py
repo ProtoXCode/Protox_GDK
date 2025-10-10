@@ -10,9 +10,10 @@ from gdk.config_loader import load_config
 from gui.view_sprite import SpriteEditor
 from gui.view_level import LevelEditor
 from gui.view_splash import SplashScreen
+from gui.view_scene import SceneEditor
 
 
-class GDKMain():
+class GDKMain:
     def __init__(self, root) -> None:
         """ GDK """
         self.root = root
@@ -33,7 +34,8 @@ class GDKMain():
         ProtoXToolKit.center_screen(self.root, self.app_width, self.app_height)
         self.root.minsize(self.app_width, self.app_height)
 
-        self.root.grid_rowconfigure(0, weight=1)
+        self.root.grid_rowconfigure(0, weight=0, minsize=self.top_menu_height)
+        self.root.grid_rowconfigure(1, weight=1)
         self.root.grid_columnconfigure(1, weight=1)
 
         ctk.set_appearance_mode('dark')
@@ -46,6 +48,13 @@ class GDKMain():
         self.top_menu.grid(row=0, column=0, sticky='nsew',
                            padx=self.padding, pady=self.padding)
         self.top_menu.grid_propagate(False)
+
+        self.sub_menu = ctk.CTkFrame(
+            self.root, width=self.menu_width,
+            height=self.app_height - self.padding * 4 - self.top_menu_height)
+        self.sub_menu.grid(row=1, column=0, sticky='nsew',
+                           padx=self.padding, pady=self.padding)
+        self.sub_menu.grid_propagate(False)
 
         self.window = ctk.CTkFrame(
             self.root,
@@ -69,19 +78,24 @@ class GDKMain():
         self.label_logo.grid(
             row=0, column=0, pady=self.padding, padx=self.padding)
 
-        ctk.CTkButton(self.top_menu, text='Sprite', width=200, height=50,
+        ctk.CTkButton(self.top_menu, text='Sprite Editor', width=200, height=30,
                       command=self.sprite_editor).grid(
-            row=1, column=0, pady=self.padding, padx=self.padding, )
+            row=1, column=0, pady=6, padx=6, )
 
-        ctk.CTkButton(self.top_menu, text='Level', width=200, height=50,
+        ctk.CTkButton(self.top_menu, text='Level Editor', width=200, height=30,
                       command=self.level_editor).grid(
-            row=2, column=0, padx=self.padding, pady=self.padding)
+            row=2, column=0, padx=6, pady=6)
+
+        ctk.CTkButton(self.top_menu, text='Scene Editor', width=200, height=30,
+                      command=self.scene_editor).grid(
+            row=3, column=0, padx=6, pady=6)
 
         # --- Views -----------------------------------------------------------
         self.views = {
             'sprite': SpriteEditor(self.window),
             'level': LevelEditor(self.window),
-            'splash': SplashScreen(self.window)
+            'splash': SplashScreen(self.window),
+            'scene': SceneEditor(self.window)
         }
 
         for v in self.views.values():
@@ -111,8 +125,9 @@ class GDKMain():
 
     def sprite_editor(self) -> None:
         self.show_view('sprite')
-        # self.clear_sub_menu()
 
     def level_editor(self) -> None:
         self.show_view('level')
-        # self.clear_sub_menu()
+
+    def scene_editor(self) -> None:
+        self.show_view('scene')

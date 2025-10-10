@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 import json
 from dataclasses import dataclass
 from pathlib import Path
@@ -28,19 +29,27 @@ class SpriteDoc:
     palette: list[list[int]]
     frames: list[SpriteFrame]
     name: str = 'unnamed'
+    fps: int = 10
+    loop: bool = True
+    author: str = 'unknown'
+    tags: list[str] = None
 
     @staticmethod
     def empty(width: int, height: int, palette: list[list[int]],
               name: str = 'unnamed') -> 'SpriteDoc':
         blank = [[-1 for _ in range(width)] for _ in range(height)]
         return SpriteDoc(width=width, height=height, palette=palette,
-                         frames=[SpriteFrame(blank)], name=name)
+                         frames=[SpriteFrame(blank)], name=name, tags=[])
 
     def to_json(self) -> dict:
         return {
             'name': self.name,
             'width': self.width,
             'height': self.height,
+            'fps': self.fps,
+            'loop': self.loop,
+            'author': self.author,
+            'tags': self.tags,
             'palette': self.palette,
             'frames': [f.pixels for f in self.frames]
         }
@@ -51,6 +60,10 @@ class SpriteDoc:
             name=d.get('name', 'unnamed'),
             width=int(d['width']),
             height=int(d['height']),
+            fps=int(d.get('fps', 10)),
+            loop=bool(d.get('loop', True)),
+            author=d.get('author', 'unknown'),
+            tags=d.get('tags', []),
             palette=[list(map(int, rgba)) for rgba in d['palette']],
             frames=[SpriteFrame(
                 [[int(v) for v in row] for row in m]) for m in d['frames']]
@@ -275,13 +288,65 @@ class SpriteEditor(ctk.CTkFrame):
 
         # Play controls
         play_box = ctk.CTkFrame(right)
-        play_box.grid(padx=8, pady=(0, 12))
-        ctk.CTkButton(play_box, text='⏵ Play', width=60,
+        play_box.grid(padx=8, pady=(0, 12), sticky='ew')
+
+        ctk.CTkButton(play_box, text='⏵ Play once', width=90,
                       command=self._play_once).grid(row=0, column=0, padx=2)
-        ctk.CTkButton(play_box, text='⟲ Clear', width=60,
-                      command=self._clear_frame).grid(row=0, column=1, padx=2)
+        ctk.CTkButton(play_box, text='🔁 Loop', width=70,
+                      command=self._play_loop).grid(row=0, column=1, padx=2)
+        ctk.CTkButton(play_box, text='⏹ Stop', width=70,
+                      command=self._stop_playback).grid(
+            row=0, column=2, padx=2)
+        ctk.CTkButton(play_box, text='⟲ Clear', width=70,
+                      command=self._clear_frame).grid(row=1, column=1, pady=2)
+
+        # --- Timing controls ---
+        speed_box = ctk.CTkFrame(right)
+        speed_box.grid(padx=8, pady=(4, 8), sticky='ew')
+        speed_box.columnconfigure(1, weight=1)  # make the slider expand
+
+        # Slider on top (row 0 spans full width)
+        self.frame_time_var = ctk.IntVar(value=int(1000 / self.doc.fps))
+        self.frame_time_slider = ctk.CTkSlider(
+            speed_box, from_=20, to=500, number_of_steps=48,
+            variable=self.frame_time_var,
+            command=self._on_frame_time_changed)
+        self.frame_time_slider.grid(
+            row=0, column=0, columnspan=2, padx=6, pady=(6, 2), sticky='ew')
+
+        # Label + entry just below the slider
+        ctk.CTkLabel(speed_box, text='Frame time (ms):').grid(
+            row=1, column=0, padx=(6, 2), sticky='w')
+        self.frame_time_entry = ctk.CTkEntry(
+            speed_box, width=60, textvariable=self.frame_time_var)
+        self.frame_time_entry.grid(
+            row=1, column=1, padx=(0, 6), pady=(0, 6), sticky='e')
 
     # --- Actions -------------------------------------------------------------
+
+    def _on_frame_time_changed(self, value: float) -> None:
+        """ Slider <---> entry synch """
+        self.frame_time_var.set(int(value))
+
+    def _play_loop(self) -> None:
+        """ Continuous playback until stopped """
+        if getattr(self, '_is_playing', False):
+            return
+        self._is_playing = True
+        self._loop_step(0)
+
+    def _loop_step(self, i: int) -> None:
+        if not getattr(self, '_is_playing', False):
+            return
+        self.active_frame = i % len(self.doc.frames)
+        self._redraw_canvas()
+        self._update_preview()
+        delay = max(1, self.frame_time_var.get())
+        self.after(delay, self._loop_step, self.active_frame + 1)
+
+    def _stop_playback(self) -> None:
+        """ Stop looping playback """
+        self._is_playing = False
 
     def _refresh_all(self) -> None:
         self._rebuild_frames_strip()
@@ -503,8 +568,18 @@ class SpriteEditor(ctk.CTkFrame):
             self._save_as_doc()
             return
 
+        data = self.doc.to_json()
+        text = json.dumps(data, indent=2)
+
+        # --- Compactify small arrays (Like palette colors) ---
+        # Convert [\n 0,\n 0,\n 0,\n 244] -> [ 0, 0, 0, 255 ]
+        text = re.sub(
+            r'\[\s*([\d\s,]+?)\s*]',
+            lambda m: "[ " + " ".join(m.group(1).split()).replace(
+                ",", ", ") + " ]", text)
+
         with open(self.last_saved_path, 'w', encoding='utf-8') as f:
-            json.dump(self.doc.to_json(), f, indent=2)
+            f.write(text)
 
     def _save_as_doc(self) -> None:
         path = asksaveasfilename(
