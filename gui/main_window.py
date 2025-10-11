@@ -78,18 +78,41 @@ class GDKMain:
         self.label_logo.grid(
             row=0, column=0, pady=self.padding, padx=self.padding)
 
-        ctk.CTkButton(self.top_menu, text='Sprite Editor', width=200,
-                      height=40,
-                      command=self.sprite_editor).grid(
-            row=1, column=0, pady=6, padx=6, )
+        btn_1_base_image = Image.open('assets/images/btn_1.png')
+        btn_2_base_image = Image.open('assets/images/btn_2.png')
+        btn_3_base_image = Image.open('assets/images/btn_3.png')
 
-        ctk.CTkButton(self.top_menu, text='Level Editor', width=200, height=40,
-                      command=self.level_editor).grid(
-            row=2, column=0, padx=6, pady=6)
+        btn_1_rounded = ProtoXToolKit.round_corners(btn_1_base_image, radius=8)
+        btn_2_rounded = ProtoXToolKit.round_corners(btn_2_base_image, radius=8)
+        btn_3_rounded = ProtoXToolKit.round_corners(btn_3_base_image, radius=8)
 
-        ctk.CTkButton(self.top_menu, text='Scene Editor', width=200, height=40,
-                      command=self.scene_editor).grid(
-            row=3, column=0, padx=6, pady=6)
+        # --- Button images ---
+        btn_1_img = ctk.CTkImage(
+            light_image=btn_1_rounded,
+            dark_image=btn_1_rounded,
+            size=(200, 40))
+
+        btn_2_img = ctk.CTkImage(
+            light_image=btn_2_rounded,
+            dark_image=btn_2_rounded,
+            size=(200, 40))
+
+        btn_3_img = ctk.CTkImage(
+            light_image=btn_3_rounded,
+            dark_image=btn_3_rounded,
+            size=(200, 40))
+
+        ctk.CTkButton(self.top_menu, text='', image=btn_1_img, border_width=0,
+                      fg_color='transparent', command=self.sprite_editor).grid(
+            row=1, column=0, padx=2)
+
+        ctk.CTkButton(self.top_menu, text='', image=btn_2_img, border_width=0,
+                      fg_color='transparent', command=self.level_editor).grid(
+            row=2, column=0, pady=2)
+
+        ctk.CTkButton(self.top_menu, text='', image=btn_3_img, border_width=0,
+                      fg_color='transparent', command=self.scene_editor).grid(
+            row=3, column=0, pady=2)
 
         # --- Views -----------------------------------------------------------
         self.views = {
