@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 import json
+import logging
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional, Any
@@ -83,12 +84,19 @@ class SpriteEditor(ctk.CTkFrame):
      - PNG export (uses current frame + palette).
     """
 
-    def __init__(self, parent):
+    def __init__(self, parent, main_app=None):
         super().__init__(parent)
+        self.main_app = main_app
         self.padding = 10
         self.cell_px = 22  # Canvas pixels per cell
         self.grid_color = '#444444'
         self.btn_bar_width = 30
+
+        self.meta_name: Optional[ctk.CTkEntry] = None
+        self.meta_author: Optional[ctk.CTkEntry] = None
+        self.meta_fps: Optional[ctk.CTkEntry] = None
+        self.meta_loop: Optional[ctk.BooleanVar] = None
+        self.meta_tags: Optional[ctk.CTkEntry] = None
 
         # Default palette (Amiga-ish)
         self.default_palette = default_palette
@@ -145,7 +153,14 @@ class SpriteEditor(ctk.CTkFrame):
         size_box = ctk.CTkFrame(bar)
         size_box.grid(row=0, column=9, padx=8)
         ctk.CTkLabel(size_box, text='Grid:').grid(row=0, column=0, padx=(4, 2))
-        for i, (w, h) in enumerate([(8, 8), (16, 16), (24, 24), (32, 32)]):
+        for i, (w, h) in enumerate([(8, 8),
+                                    (16, 16),
+                                    (24, 24),
+                                    (32, 32),
+                                    (48, 48),
+                                    (64, 64),
+                                    (128, 128),
+                                    (256, 256)]):
             cmd = partial(self._resize_grid, w, h)
             ctk.CTkButton(size_box, text=f'{w}x{h}', width=56,
                           command=cmd).grid(row=0, column=i + 1, padx=2)
@@ -154,16 +169,19 @@ class SpriteEditor(ctk.CTkFrame):
         box = ctk.CTkFrame(self)
         box.grid(row=1, column=0, sticky='nsw', padx=self.padding,
                  pady=self.padding)
+        box.columnconfigure(0, weight=1)
+
         ctk.CTkLabel(box, text='Palette').grid(padx=8, pady=(8, 4))
 
         self.palette_buttons: list[ctk.CTkButton] = []
 
         # --- grid of color buttons ---
         grid_frame = ctk.CTkFrame(box)
-        grid_frame.grid(padx=6, pady=4)
+        grid_frame.grid(row=1, column=0, padx=6, pady=4)
+        grid_frame.columnconfigure(tuple(range(4)), weight=1)
 
-        cols = 8  # how many buttons per row
-        btn_size = 30
+        cols = 4  # how many buttons per row
+        btn_size = 25
 
         for i, rgba in enumerate(self.doc.palette):
             btn = ctk.CTkButton(
@@ -175,60 +193,70 @@ class SpriteEditor(ctk.CTkFrame):
                 corner_radius=4,
                 border_width=2,
                 border_color='#222',
-                command=lambda color=i: self._select_color(color)
+                command=lambda colour=i: self._select_color(color)
             )
             r, c = divmod(i, cols)
             btn.grid(row=r, column=c, padx=3, pady=3)
             self.palette_buttons.append(btn)
 
         # --- special tools row ---
+        width = cols * (btn_size + 6) - 6  # About the grid width
         special_frame = ctk.CTkFrame(box)
-        special_frame.grid(padx=8, pady=(10, 8), sticky='ew')
+        special_frame.configure(width=width)
+        special_frame.grid(padx=6, pady=(8, 6), sticky='ew')
+        special_frame.columnconfigure(0, weight=1)
 
-        ctk.CTkButton(
-            special_frame,
-            text='Transparent',
-            width=90,
-            height=28,
-            fg_color='#000000',
-            command=lambda: self._select_color(0)
-            # assuming palette[0] = transparent
-        ).grid(row=0, column=0, padx=4, pady=4)
+        for idx, (label, color, cmd) in enumerate([
+            ('Transparent', '#000000', lambda: self._select_color(0)),
+            ('Eraser', '#1a1a1a', lambda: self._select_color(-1))]):
+            ctk.CTkButton(
+                special_frame,
+                text=label,
+                width=80,
+                height=22,
+                fg_color=color,
+                command=cmd
+            ).grid(row=idx, column=0, pady=2)
 
-        ctk.CTkButton(
-            special_frame,
-            text='Eraser',
-            width=70,
-            height=28,
-            fg_color='#1a1a1a',
-            command=lambda: self._select_color(-1)
-        ).grid(row=0, column=1, padx=4, pady=4)
+        # zoom slider (full-width, compact) ---
+        zoom_box = ctk.CTkFrame(box, fg_color='transparent')
+        zoom_box.configure(width=width)
+        zoom_box.grid(row=3, column=0, padx=6, pady=(4, 6))
+        zoom_box.columnconfigure(0, weight=1)
 
-        # zoom slider below
-        ctk.CTkLabel(box, text='Zoom').grid(padx=8, pady=(6, 0))
-        self.zoom = ctk.CTkSlider(box, from_=10, to=40, number_of_steps=15,
-                                  command=self._zoom_changed)
+        ctk.CTkLabel(zoom_box, text='Zoom', anchor='w').grid(
+            row=0, column=0, sticky='w', padx=(4, 0), pady=(2, 0))
+
+        self.zoom = ctk.CTkSlider(
+            zoom_box,
+            from_=10,
+            to=40,
+            number_of_steps=15,
+            command=self._zoom_changed,
+            width=100,
+            height=12
+        )
         self.zoom.set(self.cell_px)
-        self.zoom.grid(padx=12, pady=(0, 10))
+        self.zoom.grid(row=1, column=0, sticky='ew', padx=2, pady=(0, 4))
 
     def _build_canvas(self) -> None:
         center = ctk.CTkFrame(self)
-        center.grid(row=1, column=1, sticky="nsew",
+        center.grid(row=1, column=1, sticky='nsew',
                     padx=(0, self.padding), pady=self.padding)
         center.rowconfigure(0, weight=1)
         center.columnconfigure(0, weight=1)
 
         # --- add scrollbars ---
-        x_scroll = ctk.CTkScrollbar(center, orientation="horizontal")
-        y_scroll = ctk.CTkScrollbar(center, orientation="vertical")
-        x_scroll.grid(row=1, column=0, sticky="ew")
-        y_scroll.grid(row=0, column=1, sticky="ns")
+        x_scroll = ctk.CTkScrollbar(center, orientation='horizontal')
+        y_scroll = ctk.CTkScrollbar(center, orientation='vertical')
+        x_scroll.grid(row=1, column=0, sticky='ew')
+        y_scroll.grid(row=0, column=1, sticky='ns')
 
         # --- scrollable canvas ---
         self.canvas = ctk.CTkCanvas(
-            center, bg="#1a1a1a", highlightthickness=0,
+            center, bg='#1a1a1a', highlightthickness=0,
             xscrollcommand=x_scroll.set, yscrollcommand=y_scroll.set)
-        self.canvas.grid(row=0, column=0, sticky="nsew")
+        self.canvas.grid(row=0, column=0, sticky='nsew')
 
         self.canvas_img_id = self.canvas.create_image(0, 0, anchor='nw')
 
@@ -239,7 +267,7 @@ class SpriteEditor(ctk.CTkFrame):
         def _on_mouse_wheel(event) -> None:
             self.canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
 
-        self.canvas.bind_all("<MouseWheel>", _on_mouse_wheel)
+        self.canvas.bind_all('<MouseWheel>', _on_mouse_wheel)
 
         def _start_pan(event) -> None:
             self.canvas.scan_mark(event.x, event.y)
@@ -247,13 +275,13 @@ class SpriteEditor(ctk.CTkFrame):
         def _do_pan(event) -> None:
             self.canvas.scan_dragto(event.x, event.y, gain=1)
 
-        self.canvas.bind("<ButtonPress-2>", _start_pan)
-        self.canvas.bind("<B2-Motion>", _do_pan)
+        self.canvas.bind('<ButtonPress-2>', _start_pan)
+        self.canvas.bind('<B2-Motion>', _do_pan)
 
         # --- painting/eyedropper ---
-        self.canvas.bind("<Button-1>", self._paint_at)
-        self.canvas.bind("<B1-Motion>", self._paint_at)
-        self.canvas.bind("<Button-3>", self._eyedrop_at)
+        self.canvas.bind('<Button-1>', self._paint_at)
+        self.canvas.bind('<B1-Motion>', self._paint_at)
+        self.canvas.bind('<Button-3>', self._eyedrop_at)
 
     def _build_frames_panel(self) -> None:
         right = ctk.CTkFrame(self)
@@ -321,6 +349,69 @@ class SpriteEditor(ctk.CTkFrame):
             speed_box, width=60, textvariable=self.frame_time_var)
         self.frame_time_entry.grid(
             row=1, column=1, padx=(0, 6), pady=(0, 6), sticky='e')
+
+    def build_submenu(self, parent) -> None:
+        """ Build the left-hand sidebar for sprite metadata """
+        meta = ctk.CTkFrame(parent)
+        meta.pack(fill='both', expand=True, padx=8, pady=8)
+
+        # Title
+        ctk.CTkLabel(meta,
+                     text='Sprite Metadata',
+                     font=('Segoe UI', 14, 'bold')).pack(pady=(4, 8))
+
+        # Name
+        ctk.CTkLabel(meta, text='Name').pack(anchor='w')
+        self.meta_name = ctk.CTkEntry(meta)
+        self.meta_name.insert(0, self.doc.name)
+        self.meta_name.pack(fill='x', pady=(0, 8))
+
+        # Author
+        ctk.CTkLabel(meta, text='Author').pack(anchor='w')
+        self.meta_author = ctk.CTkEntry(meta)
+        self.meta_author.insert(0, self.doc.author)
+        self.meta_author.pack(fill='x', pady=(0, 8))
+
+        # FPS
+        ctk.CTkLabel(meta, text='Animation FPS').pack(anchor='w')
+
+        self.meta_fps = ctk.CTkEntry(meta, width=80, justify='center')
+        self.meta_fps.pack(fill='x', pady=(0, 8))
+        self.meta_fps.insert(0, self.doc.fps)
+
+        def _synch_from_slider(*_) -> None:
+            try:
+                fps = round(1000 / max(1, self.frame_time_var.get()))
+                self.meta_fps.delete(0, 'end')
+                self.meta_fps.insert(0, str(fps))
+            except Exception as e:
+                logging.error(e)
+
+        self.frame_time_var.trace_add('write', _synch_from_slider)
+
+        # Loop toggle
+        self.meta_loop = ctk.BooleanVar(value=self.doc.loop)
+        ctk.CTkCheckBox(meta, text='Loop animation',
+                        variable=self.meta_loop).pack(anchor='w', pady=(0, 8))
+
+        # Tags
+        ctk.CTkLabel(meta, text='Tags (comma-separated').pack(anchor='w')
+        self.meta_tags = ctk.CTkEntry(meta)
+        self.meta_tags.insert(0, ', '.join(self.doc.tags or []))
+        self.meta_tags.pack(fill='x', pady=(0, 8))
+
+        # Apply button
+        ctk.CTkButton(meta, text='Apply Metadata',
+                      command=self._apply_metadata).pack(pady=6)
+
+    def _apply_metadata(self) -> None:
+        """ Synch UI -> SpriteDoc """
+        self.doc.name = self.meta_name.get().strip()
+        self.doc.author = self.meta_author.get().strip()
+        self.doc.fps = int(self.meta_fps.get())
+        self.doc.loop = self.meta_loop.get()
+        tags_raw = self.meta_tags.get().strip()
+        self.doc.tags = [t.strip() for t in tags_raw.split(',') if t.strip()]
 
     # --- Actions -------------------------------------------------------------
 
@@ -408,7 +499,7 @@ class SpriteEditor(ctk.CTkFrame):
         h, w = len(matrix), len(matrix[0])
 
         # render current (and optional onion skin) into ONE image
-        base = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+        base = Image.new('RGBA', (w, h), (0, 0, 0, 0))
         px = base.load()
 
         # onion skin (previous frame) faint
@@ -621,7 +712,7 @@ class SpriteEditor(ctk.CTkFrame):
             img = img.resize((w * scale, h * scale), Resampling.NEAREST)
         return img
 
-    def _import_image(self):
+    def _import_image(self) -> None:
         path = askopenfilename(
             title='Import sprite image',
             filetypes=[('Image files', '*.png;*.jpg;*.jpeg;*.bmp'),

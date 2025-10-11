@@ -78,7 +78,8 @@ class GDKMain:
         self.label_logo.grid(
             row=0, column=0, pady=self.padding, padx=self.padding)
 
-        ctk.CTkButton(self.top_menu, text='Sprite Editor', width=200, height=30,
+        ctk.CTkButton(self.top_menu, text='Sprite Editor', width=200,
+                      height=30,
                       command=self.sprite_editor).grid(
             row=1, column=0, pady=6, padx=6, )
 
@@ -92,10 +93,10 @@ class GDKMain:
 
         # --- Views -----------------------------------------------------------
         self.views = {
-            'sprite': SpriteEditor(self.window),
-            'level': LevelEditor(self.window),
-            'splash': SplashScreen(self.window),
-            'scene': SceneEditor(self.window)
+            'sprite': SpriteEditor(self.window, main_app=self),
+            'level': LevelEditor(self.window, main_app=self),
+            'splash': SplashScreen(self.window, main_app=self),
+            'scene': SceneEditor(self.window, main_app=self)
         }
 
         for v in self.views.values():
@@ -115,7 +116,7 @@ class GDKMain:
         self.show_view('splash')
         self.fade_in()
 
-    def fade_in(self, alpha=0.0, ms=20) -> None:
+    def fade_in(self, alpha: float = 0.0, ms: int = 20) -> None:
         """ Fades in the app on startup """
         if alpha < 1.0:
             self.root.attributes('-alpha', alpha)
@@ -123,11 +124,36 @@ class GDKMain:
         else:
             self.root.attributes('-alpha', 1.0)
 
+    def set_submenu(self, builder_fn) -> None:
+        for child in self.sub_menu.winfo_children():
+            child.destroy()
+        builder_fn(self.sub_menu)
+
+    def clear_sub_menu(self) -> None:
+        """ Destroy all widgets in the sub_menu """
+        for widget in self.sub_menu.winfo_children():
+            widget.destroy()
+
     def sprite_editor(self) -> None:
         self.show_view('sprite')
+        sprite = self.views['sprite']
+        if hasattr(sprite, 'build_submenu'):
+            self.set_submenu(sprite.build_submenu)
+        else:
+            self.clear_sub_menu()
 
     def level_editor(self) -> None:
         self.show_view('level')
+        level = self.views['level']
+        if hasattr(level, 'build_submenu'):
+            self.set_submenu(level.build_submenu)
+        else:
+            self.clear_sub_menu()
 
     def scene_editor(self) -> None:
         self.show_view('scene')
+        scene = self.views['scene']
+        if hasattr(scene, 'build_submenu'):
+            self.set_submenu(scene.build_submenu)
+        else:
+            self.clear_sub_menu()

@@ -4,8 +4,9 @@ from PIL import Image
 from gdk.protox_tools import ProtoXToolKit
 
 class SplashScreen(ctk.CTkFrame):
-    def __init__(self, parent):
+    def __init__(self, parent, main_app=None):
         super().__init__(parent)
+        self.main_app = main_app
 
         self.grid_rowconfigure(0, weight=1)
         self.grid_columnconfigure(0, weight=1)

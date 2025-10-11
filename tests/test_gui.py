@@ -26,6 +26,7 @@ def test_views_exist(app):
     assert 'sprite' in app.views
     assert 'level' in app.views
     assert 'splash' in app.views
+    assert 'scene' in app.views
 
 
 def test_invalid_view(app):
