@@ -12,6 +12,7 @@ from functools import partial
 import customtkinter as ctk
 from PIL import Image, ImageTk
 from PIL.Image import Resampling
+
 from gdk.palette import default_palette
 
 
@@ -142,12 +143,14 @@ class SpriteEditor(ctk.CTkFrame):
                       command=self._save_as_doc).grid(row=0, column=4, padx=4)
         ctk.CTkButton(bar, text='Export PNG', width=self.btn_bar_width,
                       command=self._export_png).grid(row=0, column=5, padx=4)
+        ctk.CTkButton(bar, text='Export GIF', width=self.btn_bar_width,
+                      command=self._export_gif).grid(row=0, column=6, padx=4)
         ctk.CTkButton(bar, text='Import', width=self.btn_bar_width,
-                      command=self._import_image).grid(row=0, column=6, padx=4)
+                      command=self._import_image).grid(row=0, column=7, padx=4)
 
         ctk.CTkSwitch(bar, text='Onion skin', variable=self.onion_skin,
                       command=self._redraw_canvas).grid(
-            row=0, column=7, padx=12)
+            row=0, column=8, padx=12)
 
         # Size quick-picks
         size_box = ctk.CTkFrame(bar)
@@ -385,7 +388,7 @@ class SpriteEditor(ctk.CTkFrame):
                 self.meta_fps.delete(0, 'end')
                 self.meta_fps.insert(0, str(fps))
             except Exception as e:
-                logging.error(e)
+                logging.error(f'Failed to synch from slider: {e}')
 
         self.frame_time_var.trace_add('write', _synch_from_slider)
 
@@ -649,10 +652,35 @@ class SpriteEditor(ctk.CTkFrame):
 
         with open(path, 'r', encoding='utf-8') as f:
             data = json.load(f)
+
         self.doc = SpriteDoc.from_json(data)
         self.active_frame = 0
         self.last_saved_path = Path(path)
         self._refresh_all()
+
+        if self.meta_name:
+            self.meta_name.delete(0, 'end')
+            self.meta_name.insert(0, self.doc.name)
+
+        if self.meta_author:
+            self.meta_author.delete(0, 'end')
+            self.meta_author.insert(0, self.doc.author)
+
+        if self.meta_fps:
+            self.meta_fps.delete(0, 'end')
+            self.meta_fps.insert(0, self.doc.fps)
+            try:
+                frame_time_ms = int(1000 / max(1, self.doc.fps))
+                self.frame_time_var.set(frame_time_ms)
+            except Exception as e:
+                logging.error(f'Failed to synch frame time slider: {e}')
+
+        if self.meta_loop:
+            self.meta_loop.set(self.doc.loop)
+
+        if self.meta_tags:
+            self.meta_tags.delete(0, 'end')
+            self.meta_tags.insert(0, ', '.join(self.doc.tags or []))
 
     def _save_doc(self) -> None:
         if self.last_saved_path is None:
@@ -694,6 +722,31 @@ class SpriteEditor(ctk.CTkFrame):
 
         img = self._render_frame(self.active_frame, scale=1)
         img.save(path, 'PNG')
+
+        logging.info(f'Exported PNG to {path}')
+
+    def _export_gif(self):
+        path = asksaveasfilename(
+            title='Export GIF (animated gif)',
+            defaultextension='.gif',
+            filetypes=[('GIF image', '*.gif'), ('All Files', '*.*')])
+
+        if not path:
+            return
+
+        images = [self._render_frame(i) for i in range(len(self.doc.frames))]
+        frame_duration = max(1, self.frame_time_var.get())
+
+        images[0].save(
+            path,
+            save_all=True,
+            append_images=images[1:],
+            duration=frame_duration,
+            loop=0 if self.doc.loop else 1,
+            disposal=2,
+            transparency=0)
+
+        logging.info(f'Exported GIF to {path}')
 
     def _render_frame(self, index: int, scale: int = 1) -> Image.Image:
         """ Render a frame to a PIL image using the palette """

@@ -13,7 +13,7 @@ def load_config() -> dict:
             config = json.load(json_data)
 
     except FileNotFoundError:
-        config = {'app_width': 1500,
+        config = {'app_width': 1575,
                   'app_height': 825}
         with open(config_file, encoding='utf-8', mode='w') as json_data:
             json.dump(config, json_data, indent=4)

@@ -20,7 +20,7 @@ class GDKMain:
         self.config = load_config()
         self.padding = 10
         self.menu_width = 300
-        self.top_menu_height = 300
+        self.top_menu_height = 325
 
         self.app_width = self.config['app_width']
         self.app_height = self.config['app_height']
@@ -79,15 +79,15 @@ class GDKMain:
             row=0, column=0, pady=self.padding, padx=self.padding)
 
         ctk.CTkButton(self.top_menu, text='Sprite Editor', width=200,
-                      height=30,
+                      height=40,
                       command=self.sprite_editor).grid(
             row=1, column=0, pady=6, padx=6, )
 
-        ctk.CTkButton(self.top_menu, text='Level Editor', width=200, height=30,
+        ctk.CTkButton(self.top_menu, text='Level Editor', width=200, height=40,
                       command=self.level_editor).grid(
             row=2, column=0, padx=6, pady=6)
 
-        ctk.CTkButton(self.top_menu, text='Scene Editor', width=200, height=30,
+        ctk.CTkButton(self.top_menu, text='Scene Editor', width=200, height=40,
                       command=self.scene_editor).grid(
             row=3, column=0, padx=6, pady=6)
 
