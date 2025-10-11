@@ -208,5 +208,5 @@ __marimo__/
 
 # ProtoX_GDK
 logs/
-games/
+temp*/
 gdk/config.json
