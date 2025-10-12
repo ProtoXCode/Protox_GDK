@@ -459,7 +459,7 @@ class SpriteEditor(ctk.CTkFrame):
                 self._update_preview()
                 self._rebuild_frames_strip()
 
-            label = f'[{idx}]'
+            label = f'[{idx + 1}]'
             btn = ctk.CTkButton(
                 self.frames_strip, text=label, width=60, command=switch)
             if idx == self.active_frame:
@@ -693,9 +693,9 @@ class SpriteEditor(ctk.CTkFrame):
         # --- Compactify small arrays (Like palette colors) ---
         # Convert [\n 0,\n 0,\n 0,\n 244] -> [ 0, 0, 0, 255 ]
         text = re.sub(
-            r'\[\s*([\d\s,]+?)\s*]',
-            lambda m: "[ " + " ".join(m.group(1).split()).replace(
-                ",", ", ") + " ]", text)
+            r'\[\s*((?:-?\d+\s*,\s*)*-?\d+)\s*]',
+            lambda m: "[ " + re.sub(r'\s*,\s*', ', ', m.group(1)) + " ]",
+            text)
 
         with open(self.last_saved_path, 'w', encoding='utf-8') as f:
             f.write(text)
