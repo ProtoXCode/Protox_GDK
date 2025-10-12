@@ -78,28 +78,55 @@ class GDKMain:
         self.label_logo.grid(
             row=0, column=0, pady=self.padding, padx=self.padding)
 
-        btn_1_base_image = Image.open('assets/images/btn_1.png')
-        btn_2_base_image = Image.open('assets/images/btn_2.png')
-        btn_3_base_image = Image.open('assets/images/btn_3.png')
+        # --- Buttons ---
+        btn_font = ('arial.ttf', 20)
+        btn_text_color = (255, 255, 255, 255)
+        btn_text_color_outline = (0, 0, 0, 255)
+        btn_radius = 8
+        btn_outline = 3
 
-        btn_1_rounded = ProtoXToolKit.round_corners(btn_1_base_image, radius=8)
-        btn_2_rounded = ProtoXToolKit.round_corners(btn_2_base_image, radius=8)
-        btn_3_rounded = ProtoXToolKit.round_corners(btn_3_base_image, radius=8)
+        btn_1_base = 'assets/images/btn_1.png'
+        btn_2_base = 'assets/images/btn_2.png'
+        btn_3_base = 'assets/images/btn_3.png'
 
-        # --- Button images ---
+        # Rounded + text composited
+        btn_1_img_pil = ProtoXToolKit.image_text(
+            image=btn_1_base, text='Sprite Editor',
+            bold=True, outline=btn_outline,
+            outline_color=btn_text_color_outline,
+            font=btn_font, fill=btn_text_color)
+        btn_1_img_pil = ProtoXToolKit.round_corners(
+            btn_1_img_pil, radius=btn_radius)
+
+        btn_2_img_pil = ProtoXToolKit.image_text(
+            image=btn_2_base, text='Level Editor',
+            bold=True, outline=btn_outline,
+            outline_color=btn_text_color_outline,
+            font=btn_font, fill=btn_text_color)
+        btn_2_img_pil = ProtoXToolKit.round_corners(
+            btn_2_img_pil, radius=btn_radius)
+
+        btn_3_img_pil = ProtoXToolKit.image_text(
+            image=btn_3_base, text='Scene Editor',
+            bold=True, outline=btn_outline,
+            outline_color=btn_text_color_outline,
+            font=btn_font, fill=btn_text_color)
+        btn_3_img_pil = ProtoXToolKit.round_corners(
+            btn_3_img_pil, radius=btn_radius)
+
         btn_1_img = ctk.CTkImage(
-            light_image=btn_1_rounded,
-            dark_image=btn_1_rounded,
+            light_image=btn_1_img_pil,
+            dark_image=btn_1_img_pil,
             size=(200, 40))
 
         btn_2_img = ctk.CTkImage(
-            light_image=btn_2_rounded,
-            dark_image=btn_2_rounded,
+            light_image=btn_2_img_pil,
+            dark_image=btn_2_img_pil,
             size=(200, 40))
 
         btn_3_img = ctk.CTkImage(
-            light_image=btn_3_rounded,
-            dark_image=btn_3_rounded,
+            light_image=btn_3_img_pil,
+            dark_image=btn_3_img_pil,
             size=(200, 40))
 
         ctk.CTkButton(self.top_menu, text='', image=btn_1_img, border_width=0,
