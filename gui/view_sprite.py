@@ -35,13 +35,20 @@ class SpriteDoc:
     loop: bool = True
     author: str = 'unknown'
     tags: list[str] = None
+    properties: dict[str, Any] = None
 
     @staticmethod
     def empty(width: int, height: int, palette: list[list[int]],
               name: str = 'unnamed') -> 'SpriteDoc':
         blank = [[-1 for _ in range(width)] for _ in range(height)]
         return SpriteDoc(width=width, height=height, palette=palette,
-                         frames=[SpriteFrame(blank)], name=name, tags=[])
+                         frames=[SpriteFrame(blank)], name=name, tags=[],
+                         properties={
+                             'collision': False,
+                             'static': False,
+                             'background': False,
+                             'player': False
+                         })
 
     def to_json(self) -> dict:
         return {
@@ -53,7 +60,8 @@ class SpriteDoc:
             'author': self.author,
             'tags': self.tags,
             'palette': self.palette,
-            'frames': [f.pixels for f in self.frames]
+            'frames': [f.pixels for f in self.frames],
+            'properties': self.properties or {}
         }
 
     @staticmethod
@@ -68,7 +76,13 @@ class SpriteDoc:
             tags=d.get('tags', []),
             palette=[list(map(int, rgba)) for rgba in d['palette']],
             frames=[SpriteFrame(
-                [[int(v) for v in row] for row in m]) for m in d['frames']]
+                [[int(v) for v in row] for row in m]) for m in d['frames']],
+            properties=d.get('properties', {
+                'collision': False,
+                'static': False,
+                'background': False,
+                'player': False
+            })
         )
 
 
@@ -109,6 +123,13 @@ class SpriteEditor(ctk.CTkFrame):
         self.active_color_index = 1  # Default: black
         self.onion_skin = ctk.BooleanVar(value=False)
         self.last_saved_path: Optional[Path] = None
+
+        # Default values
+        self.fill_mode = False
+        self.prop_collision = None
+        self.prop_static = None
+        self.prop_background = None
+        self.prop_player = None
 
         # Layout: left (tools) | center (canvas) | right (frames/preview)
         self.columnconfigure(1, weight=1)
@@ -210,8 +231,8 @@ class SpriteEditor(ctk.CTkFrame):
         special_frame.columnconfigure(0, weight=1)
 
         for idx, (label, color, cmd) in enumerate([
-            ('Transparent', '#000000', lambda: self._select_color(0)),
-            ('Eraser', '#1a1a1a', lambda: self._select_color(-1))]):
+            ('Transparent', '#000000', lambda: self._select_color(-1)),
+            ('Fill', '#333333', lambda: self._enable_fill_mode())]):
             ctk.CTkButton(
                 special_frame,
                 text=label,
@@ -354,58 +375,90 @@ class SpriteEditor(ctk.CTkFrame):
             row=1, column=1, padx=(0, 6), pady=(0, 6), sticky='e')
 
     def build_submenu(self, parent) -> None:
-        """ Build the left-hand sidebar for sprite metadata """
+        """Build the left-hand sidebar for sprite metadata."""
         meta = ctk.CTkFrame(parent)
-        meta.pack(fill='both', expand=True, padx=8, pady=8)
+        meta.grid(row=0, column=0, sticky="nsew", padx=8, pady=8)
+        meta.columnconfigure(1, weight=1)  # allow the right side to stretch
 
-        # Title
-        ctk.CTkLabel(meta,
-                     text='Sprite Metadata',
-                     font=('Segoe UI', 14, 'bold')).pack(pady=(4, 8))
+        # --- Title ---
+        ctk.CTkLabel(
+            meta, text="Sprite Metadata", font=("Segoe UI", 14, "bold")).grid(
+            row=0, column=0, columnspan=2, pady=(4, 8))
 
-        # Name
-        ctk.CTkLabel(meta, text='Name').pack(anchor='w')
+        # --- Name ---
+        ctk.CTkLabel(meta, text="Name:").grid(
+            row=1, column=0, sticky="w", pady=2)
         self.meta_name = ctk.CTkEntry(meta)
         self.meta_name.insert(0, self.doc.name)
-        self.meta_name.pack(fill='x', pady=(0, 8))
+        self.meta_name.grid(row=1, column=1, sticky="ew", pady=2)
 
-        # Author
-        ctk.CTkLabel(meta, text='Author').pack(anchor='w')
+        # --- Author ---
+        ctk.CTkLabel(meta, text="Author:").grid(
+            row=2, column=0, sticky="w", pady=2)
         self.meta_author = ctk.CTkEntry(meta)
         self.meta_author.insert(0, self.doc.author)
-        self.meta_author.pack(fill='x', pady=(0, 8))
+        self.meta_author.grid(row=2, column=1, sticky="ew", pady=2)
 
-        # FPS
-        ctk.CTkLabel(meta, text='Animation FPS').pack(anchor='w')
-
-        self.meta_fps = ctk.CTkEntry(meta, width=80, justify='center')
-        self.meta_fps.pack(fill='x', pady=(0, 8))
+        # --- FPS ---
+        ctk.CTkLabel(meta, text="Animation FPS:").grid(
+            row=3, column=0, sticky="w", pady=2)
+        self.meta_fps = ctk.CTkEntry(meta, width=80, justify="center")
         self.meta_fps.insert(0, self.doc.fps)
+        self.meta_fps.grid(row=3, column=1, sticky="ew", pady=2)
 
-        def _synch_from_slider(*_) -> None:
+        # keep the slider -> FPS sync
+        def _synch_from_slider(*_):
             try:
                 fps = round(1000 / max(1, self.frame_time_var.get()))
-                self.meta_fps.delete(0, 'end')
+                self.meta_fps.delete(0, "end")
                 self.meta_fps.insert(0, str(fps))
             except Exception as e:
-                logging.error(f'Failed to synch from slider: {e}')
+                logging.error(e)
 
-        self.frame_time_var.trace_add('write', _synch_from_slider)
+        self.frame_time_var.trace_add("write", _synch_from_slider)
 
-        # Loop toggle
+        # --- Loop toggle ---
+        ctk.CTkLabel(meta, text="Loop:").grid(
+            row=4, column=0, sticky="w", pady=2)
         self.meta_loop = ctk.BooleanVar(value=self.doc.loop)
-        ctk.CTkCheckBox(meta, text='Loop animation',
-                        variable=self.meta_loop).pack(anchor='w', pady=(0, 8))
+        ctk.CTkCheckBox(meta, text="", variable=self.meta_loop).grid(
+            row=4, column=1, sticky="w", pady=2)
 
-        # Tags
-        ctk.CTkLabel(meta, text='Tags (comma-separated').pack(anchor='w')
+        # --- Tags ---
+        ctk.CTkLabel(meta, text="Tags:").grid(
+            row=5, column=0, sticky="w", pady=2)
         self.meta_tags = ctk.CTkEntry(meta)
-        self.meta_tags.insert(0, ', '.join(self.doc.tags or []))
-        self.meta_tags.pack(fill='x', pady=(0, 8))
+        self.meta_tags.insert(0, ", ".join(self.doc.tags or []))
+        self.meta_tags.grid(row=5, column=1, sticky="ew", pady=2)
 
-        # Apply button
-        ctk.CTkButton(meta, text='Apply Metadata',
-                      command=self._apply_metadata).pack(pady=6)
+        # --- Properties ---
+        ctk.CTkLabel(meta, text="Properties:").grid(
+            row=6, column=0, sticky="nw", pady=(6, 2))
+        flags_box = ctk.CTkFrame(meta, fg_color="transparent")
+        flags_box.grid(row=6, column=1, sticky="w", pady=(6, 2))
+
+        self.prop_collision = ctk.BooleanVar(
+            value=self.doc.properties.get("collision", False))
+        self.prop_static = ctk.BooleanVar(
+            value=self.doc.properties.get("static", False))
+        self.prop_background = ctk.BooleanVar(
+            value=self.doc.properties.get("background", False))
+        self.prop_player = ctk.BooleanVar(
+            value=self.doc.properties.get("player", False))
+
+        ctk.CTkCheckBox(flags_box, text="Collision",
+                        variable=self.prop_collision).grid(sticky="w")
+        ctk.CTkCheckBox(flags_box, text="Static Asset",
+                        variable=self.prop_static).grid(sticky="w")
+        ctk.CTkCheckBox(flags_box, text="Background",
+                        variable=self.prop_background).grid(sticky="w")
+        ctk.CTkCheckBox(flags_box, text="Player Character",
+                        variable=self.prop_player).grid(sticky="w")
+
+        # --- Apply button ---
+        ctk.CTkButton(meta, text="Apply Metadata",
+                      command=self._apply_metadata).grid(
+            row=7, column=0, columnspan=2, pady=(10, 4))
 
     def _apply_metadata(self) -> None:
         """ Synch UI -> SpriteDoc """
@@ -415,6 +468,12 @@ class SpriteEditor(ctk.CTkFrame):
         self.doc.loop = self.meta_loop.get()
         tags_raw = self.meta_tags.get().strip()
         self.doc.tags = [t.strip() for t in tags_raw.split(',') if t.strip()]
+        self.doc.properties = {
+            'collision': self.prop_collision.get(),
+            'static': self.prop_static.get(),
+            'background': self.prop_background.get(),
+            'player': self.prop_player.get()
+        }
 
     # --- Actions -------------------------------------------------------------
 
@@ -568,10 +627,17 @@ class SpriteEditor(ctk.CTkFrame):
         if not (0 <= x < self.doc.width and 0 <= y < self.doc.height):
             return
         mat = self.doc.frames[self.active_frame].pixels
-        if mat[y][x] == self.active_color_index:
-            return
-        mat[y][x] = self.active_color_index
-        # re-render image (fast now)
+
+        if self.fill_mode:
+            target = mat[y][x]
+            if target == self.active_color_index:
+                return
+            self._flood_fill(mat, x, y, target, self.active_color_index)
+        else:
+            if mat[y][x] == self.active_color_index:
+                return
+            mat[y][x] = self.active_color_index
+
         self._redraw_canvas()
         self._update_preview()
 
@@ -589,6 +655,28 @@ class SpriteEditor(ctk.CTkFrame):
                 btn.configure(border_color='#ffffff', border_width=3)
             else:
                 btn.configure(border_color='#222', border_width=2)
+
+    def _enable_fill_mode(self) -> None:
+        self.fill_mode = not self.fill_mode
+        print(f"Fill mode {'on' if self.fill_mode else 'off'}")
+        # TODO: make button selection visible
+
+    @staticmethod
+    def _flood_fill(mat, x, y, target_color, replacement_color) -> None:
+        """Recursive fill (4-directional)."""
+        if target_color == replacement_color:
+            return
+        h, w = len(mat), len(mat[0])
+        stack = [(x, y)]
+        while stack:
+            cx, cy = stack.pop()
+            if cx < 0 or cy < 0 or cx >= w or cy >= h:
+                continue
+            if mat[cy][cx] != target_color:
+                continue
+            mat[cy][cx] = replacement_color
+            stack.extend(
+                [(cx + 1, cy), (cx - 1, cy), (cx, cy + 1), (cx, cy - 1)])
 
     def _zoom_changed(self, value) -> None:
         self.cell_px = int(float(value))
