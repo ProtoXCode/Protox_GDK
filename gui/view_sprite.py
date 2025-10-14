@@ -123,6 +123,7 @@ class SpriteEditor(ctk.CTkFrame):
         self.active_color_index = 1  # Default: black
         self.onion_skin = ctk.BooleanVar(value=False)
         self.last_saved_path: Optional[Path] = None
+        self._suspend_autoapply = False
 
         # Default values
         self.fill_mode = False
@@ -455,27 +456,70 @@ class SpriteEditor(ctk.CTkFrame):
         ctk.CTkCheckBox(flags_box, text="Player Character",
                         variable=self.prop_player).grid(sticky="w")
 
-        # --- Apply button ---
-        ctk.CTkButton(meta, text="Apply Metadata",
-                      command=self._apply_metadata).grid(
-            row=7, column=0, columnspan=2, pady=(10, 4))
+        def _bind_autoapply(widget, event_type="<FocusOut>"):
+            """Bind automatic metadata save to widget change or focus loss."""
+            if hasattr(widget, "bind"):  # only bind real widgets
+                widget.bind(event_type, lambda event: self._apply_metadata())
+
+        # only bind entry widgets
+        for entry in (
+                self.meta_name,
+                self.meta_author,
+                self.meta_fps,
+                self.meta_tags):
+            _bind_autoapply(entry)
+
+        # trace BooleanVars instead
+        for var in (
+                self.meta_loop,
+                self.prop_collision,
+                self.prop_static,
+                self.prop_background,
+                self.prop_player):
+            # three-arg lambda to match trace_add signature
+            var.trace_add(
+                "write", lambda var_name, index, mode: self._apply_metadata())
 
     def _apply_metadata(self) -> None:
         """ Synch UI -> SpriteDoc """
+        if getattr(self, '_suspend_autoapply', False):
+            return
+
         self.doc.name = self.meta_name.get().strip()
         self.doc.author = self.meta_author.get().strip()
         self.doc.fps = int(self.meta_fps.get())
         self.doc.loop = self.meta_loop.get()
+
         tags_raw = self.meta_tags.get().strip()
         self.doc.tags = [t.strip() for t in tags_raw.split(',') if t.strip()]
+
         self.doc.properties = {
             'collision': self.prop_collision.get(),
             'static': self.prop_static.get(),
             'background': self.prop_background.get(),
-            'player': self.prop_player.get()
-        }
+            'player': self.prop_player.get()}
+
+        self._show_saved_status()
+
+    def _show_saved_status(self) -> None:
+        if getattr(self, '_suspend_autoapply', False):
+            return
+
+        if hasattr(self, '_save_label'):
+            self._save_label.destroy()
+
+        self._save_label = ctk.CTkLabel(
+            self.main_app.sub_menu, text='✓ Saved', text_color='green')
+
+        self._save_label.place(relx=1.0, rely=1.0, x=-10, y=-10, anchor='se')
+        # noinspection PyTypeChecker
+        self.after(1500, lambda: self._save_label.destroy())
 
     # --- Actions -------------------------------------------------------------
+
+    def _bind_autoapply(self, widget, event_type='<FocusOut>') -> None:
+        """ Bind automatic metadata save to widget change of focus loss. """
+        widget.bind(event_type, lambda event: self._apply_metadata())
 
     def _on_frame_time_changed(self, value: float) -> None:
         """ Slider <---> entry synch """
@@ -623,6 +667,7 @@ class SpriteEditor(ctk.CTkFrame):
         return x, y
 
     def _paint_at(self, event) -> None:
+        self.focus_set()
         x, y = self._event_to_cell(event)
         if not (0 <= x < self.doc.width and 0 <= y < self.doc.height):
             return
@@ -746,29 +791,33 @@ class SpriteEditor(ctk.CTkFrame):
         self.last_saved_path = Path(path)
         self._refresh_all()
 
-        if self.meta_name:
-            self.meta_name.delete(0, 'end')
-            self.meta_name.insert(0, self.doc.name)
+        # --- suspend trace/autoapply while updating UI ---
+        self._suspend_autoapply = True
+        try:
+            if self.meta_name:
+                self.meta_name.delete(0, 'end')
+                self.meta_name.insert(0, self.doc.name)
+            if self.meta_author:
+                self.meta_author.delete(0, 'end')
+                self.meta_author.insert(0, self.doc.author)
+            if self.meta_fps:
+                self.meta_fps.delete(0, 'end')
+                self.meta_fps.insert(0, self.doc.fps)
+            if self.meta_tags:
+                self.meta_tags.delete(0, 'end')
+                self.meta_tags.insert(0, ', '.join(self.doc.tags or []))
+            if self.meta_loop:
+                self.meta_loop.set(self.doc.loop)
 
-        if self.meta_author:
-            self.meta_author.delete(0, 'end')
-            self.meta_author.insert(0, self.doc.author)
-
-        if self.meta_fps:
-            self.meta_fps.delete(0, 'end')
-            self.meta_fps.insert(0, self.doc.fps)
-            try:
-                frame_time_ms = int(1000 / max(1, self.doc.fps))
-                self.frame_time_var.set(frame_time_ms)
-            except Exception as e:
-                logging.error(f'Failed to synch frame time slider: {e}')
-
-        if self.meta_loop:
-            self.meta_loop.set(self.doc.loop)
-
-        if self.meta_tags:
-            self.meta_tags.delete(0, 'end')
-            self.meta_tags.insert(0, ', '.join(self.doc.tags or []))
+            # now update the property checkboxes as well
+            if hasattr(self.doc, 'properties'):
+                props = self.doc.properties
+                self.prop_collision.set(props.get('collision', False))
+                self.prop_static.set(props.get('static', False))
+                self.prop_background.set(props.get('background', False))
+                self.prop_player.set(props.get('player', False))
+        finally:
+            self._suspend_autoapply = False
 
     def _save_doc(self) -> None:
         if self.last_saved_path is None:
