@@ -7,7 +7,7 @@ from PIL import Image
 from gdk import __name__, __version__
 from gdk.protox_tools import ProtoXToolKit
 from gdk.config_loader import load_config
-from gui.sprite_editor import SpriteEditor
+from gui.sprite_editor.editor import SpriteEditor
 from gui.view_level import LevelEditor
 from gui.view_splash import SplashScreen
 from gui.view_scene import SceneEditor

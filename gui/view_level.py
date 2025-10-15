@@ -1,5 +1,6 @@
 import customtkinter as ctk
 
+
 class LevelEditor(ctk.CTkFrame):
     def __init__(self, parent, main_app=None):
         super().__init__(parent)

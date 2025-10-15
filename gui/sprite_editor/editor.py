@@ -1,19 +1,18 @@
 from __future__ import annotations
 
-import re
-import json
-import logging
 from pathlib import Path
 from typing import Optional, Any
-from tkinter.filedialog import askopenfilename, asksaveasfilename
 from functools import partial
 
 import customtkinter as ctk
-from PIL import Image, ImageTk
-from PIL.Image import Resampling
+from PIL import Image
+from customtkinter import CTkFrame
 
 from gdk.palette import default_palette
+from .canvas_view import CanvasView
 from .core import SpriteFrame, SpriteDoc
+from .io_manager import SpriteIOManager
+from .metadata import MetadataPanel
 
 
 class SpriteEditor(ctk.CTkFrame):
@@ -23,22 +22,15 @@ class SpriteEditor(ctk.CTkFrame):
      - Grid painting with a tiny palette (RGBA).
      - Multiple frames (add/duplicate/delete).
      - Save/Load JSON (`SpriteDoc` format).
-     - PNG export (uses current frame + palette).
+     - PNG/GIF export (uses current frame + palette).
     """
 
     def __init__(self, parent, main_app=None):
         super().__init__(parent)
         self.main_app = main_app
         self.padding = 10
-        self.cell_px = 22  # Canvas pixels per cell
         self.grid_color = '#444444'
         self.btn_bar_width = 30
-
-        self.meta_name: Optional[ctk.CTkEntry] = None
-        self.meta_author: Optional[ctk.CTkEntry] = None
-        self.meta_fps: Optional[ctk.CTkEntry] = None
-        self.meta_loop: Optional[ctk.BooleanVar] = None
-        self.meta_tags: Optional[ctk.CTkEntry] = None
 
         # Default palette (Amiga-ish)
         self.default_palette = default_palette
@@ -50,14 +42,14 @@ class SpriteEditor(ctk.CTkFrame):
         self.active_color_index = 1  # Default: black
         self.onion_skin = ctk.BooleanVar(value=False)
         self.last_saved_path: Optional[Path] = None
-        self._suspend_autoapply = False
 
         # Default values
         self.fill_mode = False
-        self.prop_collision = None
-        self.prop_static = None
-        self.prop_background = None
-        self.prop_player = None
+
+        # Helper components
+        self.canvas_view = CanvasView(self)
+        self.metadata_panel = MetadataPanel(self)
+        self.io_manager = SpriteIOManager(self)
 
         # Layout: left (tools) | center (canvas) | right (frames/preview)
         self.columnconfigure(1, weight=1)
@@ -67,11 +59,22 @@ class SpriteEditor(ctk.CTkFrame):
         self._build_palette()
         self._build_canvas()
         self._build_frames_panel()
-        self._refresh_all()
+        self.refresh_all()
 
     # --- UI Builder ----------------------------------------------------------
 
     def _build_toolbar(self):
+        """
+        Construct the top toolbar for core sprite operations.
+
+        Creates a horizontal button bar that provides:
+          - File actions: New, Open, Save, Save As, Import, Export (PNG/GIF)
+          - Utility toggle: Onion skin mode
+          - Quick grid presets (8×8, 16×16, 32×32, etc.)
+
+        The toolbar also handles dynamic layout using `grid` and
+        connects each button to its respective editor command.
+        """
         bar = ctk.CTkFrame(self)
         bar.grid(row=0, column=0, columnspan=3, sticky='ew',
                  padx=self.padding, pady=(self.padding, 0))
@@ -98,7 +101,7 @@ class SpriteEditor(ctk.CTkFrame):
                       command=self._import_image).grid(row=0, column=7, padx=4)
 
         ctk.CTkSwitch(bar, text='Onion skin', variable=self.onion_skin,
-                      command=self._redraw_canvas).grid(
+                      command=self.canvas_view.redraw_canvas).grid(
             row=0, column=8, padx=12)
 
         # Size quick-picks
@@ -113,11 +116,22 @@ class SpriteEditor(ctk.CTkFrame):
                                     (64, 64),
                                     (128, 128),
                                     (256, 256)]):
-            cmd = partial(self._resize_grid, w, h)
+            cmd = partial(self.resize_grid, w, h)
             ctk.CTkButton(size_box, text=f'{w}x{h}', width=56,
                           command=cmd).grid(row=0, column=i + 1, padx=2)
 
     def _build_palette(self) -> None:
+        """
+        Build the left-side color palette and special drawing tools.
+
+        Provides:
+          - A grid of color buttons derived from the current palette
+          - Special buttons for transparency and fill modes
+          - A zoom slider that scales the canvas cell size
+
+        Handles layout with compact frames and dynamically binds
+        each palette button to `select_color()`.
+        """
         box = ctk.CTkFrame(self)
         box.grid(row=1, column=0, sticky='nsw', padx=self.padding,
                  pady=self.padding)
@@ -145,7 +159,7 @@ class SpriteEditor(ctk.CTkFrame):
                 corner_radius=4,
                 border_width=2,
                 border_color='#222',
-                command=lambda sel_color=i: self._select_color(sel_color)
+                command=lambda sel_color=i: self.select_color(sel_color)
             )
             r, c = divmod(i, cols)
             btn.grid(row=r, column=c, padx=3, pady=3)
@@ -159,7 +173,7 @@ class SpriteEditor(ctk.CTkFrame):
         special_frame.columnconfigure(0, weight=1)
 
         for idx, (label, color, cmd) in enumerate([
-            ('Transparent', '#000000', lambda: self._select_color(-1)),
+            ('Transparent', '#000000', lambda: self.select_color(-1)),
             ('Fill', '#333333', lambda: self._enable_fill_mode())]):
             ctk.CTkButton(
                 special_frame,
@@ -184,58 +198,46 @@ class SpriteEditor(ctk.CTkFrame):
             from_=10,
             to=40,
             number_of_steps=15,
-            command=self._zoom_changed,
+            command=self.canvas_view.zoom_changed,
             width=100,
             height=12
         )
-        self.zoom.set(self.cell_px)
+        self.zoom.set(self.canvas_view.cell_px)
         self.zoom.grid(row=1, column=0, sticky='ew', padx=2, pady=(0, 4))
 
     def _build_canvas(self) -> None:
-        center = ctk.CTkFrame(self)
-        center.grid(row=1, column=1, sticky='nsew',
-                    padx=(0, self.padding), pady=self.padding)
-        center.rowconfigure(0, weight=1)
-        center.columnconfigure(0, weight=1)
+        """
+        Create the central drawing canvas and configure its behavior.
 
-        # --- add scrollbars ---
-        x_scroll = ctk.CTkScrollbar(center, orientation='horizontal')
-        y_scroll = ctk.CTkScrollbar(center, orientation='vertical')
-        x_scroll.grid(row=1, column=0, sticky='ew')
-        y_scroll.grid(row=0, column=1, sticky='ns')
+        The canvas displays the active sprite frame and supports:
+          - Left-click painting
+          - Right-click color picking (eyedropper)
+          - Middle-click panning
+          - Mouse-wheel scrolling
 
-        # --- scrollable canvas ---
-        self.canvas = ctk.CTkCanvas(
-            center, bg='#1a1a1a', highlightthickness=0,
-            xscrollcommand=x_scroll.set, yscrollcommand=y_scroll.set)
-        self.canvas.grid(row=0, column=0, sticky='nsew')
+        Includes both horizontal and vertical scrollbars, linked via
+        `xscrollcommand` and `yscrollcommand`. The canvas is internally
+        tied to an offscreen `PhotoImage` buffer for real-time updates.
 
-        self.canvas_img_id = self.canvas.create_image(0, 0, anchor='nw')
-
-        # connect scrollbars
-        x_scroll.configure(command=self.canvas.xview)
-        y_scroll.configure(command=self.canvas.yview)
-
-        def _on_mouse_wheel(event) -> None:
-            self.canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
-
-        self.canvas.bind_all('<MouseWheel>', _on_mouse_wheel)
-
-        def _start_pan(event) -> None:
-            self.canvas.scan_mark(event.x, event.y)
-
-        def _do_pan(event) -> None:
-            self.canvas.scan_dragto(event.x, event.y, gain=1)
-
-        self.canvas.bind('<ButtonPress-2>', _start_pan)
-        self.canvas.bind('<B2-Motion>', _do_pan)
-
-        # --- painting/eyedropper ---
-        self.canvas.bind('<Button-1>', self._paint_at)
-        self.canvas.bind('<B1-Motion>', self._paint_at)
-        self.canvas.bind('<Button-3>', self._eyedrop_at)
+        The scroll region dynamically adjusts to match the current grid
+        size when zoomed or resized.
+        """
+        self.canvas_view.build(self)
 
     def _build_frames_panel(self) -> None:
+        """
+        Construct the right-side panel for frame management and playback.
+
+        Includes:
+          - A list of frame buttons for navigation
+          - Actions for creating, duplicating, or deleting frames
+          - A live preview of the current frame
+          - Playback controls (Play once, Loop, Stop, Clear)
+          - Frame timing slider and entry box (linked to FPS)
+
+        This panel is responsible for multi-frame animation handling
+        and small-scale playback previews within the editor.
+        """
         right = ctk.CTkFrame(self)
         right.grid(row=1, column=2, sticky='ns',
                    padx=(0, self.padding), pady=self.padding)
@@ -265,6 +267,7 @@ class SpriteEditor(ctk.CTkFrame):
         ctk.CTkLabel(right, text='Preview').grid(padx=8, pady=(10, 0))
         self.preview_label = ctk.CTkLabel(right, text='')
         self.preview_label.grid(padx=8, pady=(0, 8))
+        self.canvas_view.set_preview_label(self.preview_label)
 
         # Play controls
         play_box = ctk.CTkFrame(right)
@@ -302,155 +305,50 @@ class SpriteEditor(ctk.CTkFrame):
         self.frame_time_entry.grid(
             row=1, column=1, padx=(0, 6), pady=(0, 6), sticky='e')
 
-    def build_submenu(self, parent) -> None:
-        """Build the left-hand sidebar for sprite metadata."""
-        meta = ctk.CTkFrame(parent)
-        meta.grid(row=0, column=0, sticky="nsew", padx=8, pady=8)
-        meta.columnconfigure(1, weight=1)  # allow the right side to stretch
+    def build_submenu(self, parent) -> CTkFrame:
+        """
+        Build the left-side metadata panel for sprite properties.
 
-        # --- Title ---
-        ctk.CTkLabel(
-            meta, text="Sprite Metadata", font=("Segoe UI", 14, "bold")).grid(
-            row=0, column=0, columnspan=2, pady=(4, 8))
+        Displays editable metadata fields for the current sprite, including:
+          - Name
+          - Author
+          - Animation FPS (linked to frame-time slider)
+          - Loop toggle
+          - Tags (comma-separated)
+          - Object properties (e.g., collision, player, static, background)
 
-        # --- Name ---
-        ctk.CTkLabel(meta, text="Name:").grid(
-            row=1, column=0, sticky="w", pady=2)
-        self.meta_name = ctk.CTkEntry(meta)
-        self.meta_name.insert(0, self.doc.name)
-        self.meta_name.grid(row=1, column=1, sticky="ew", pady=2)
+        The fields automatically apply changes on modification (`trace_add`)
+        and persist updates directly to the underlying `SpriteDoc`.
 
-        # --- Author ---
-        ctk.CTkLabel(meta, text="Author:").grid(
-            row=2, column=0, sticky="w", pady=2)
-        self.meta_author = ctk.CTkEntry(meta)
-        self.meta_author.insert(0, self.doc.author)
-        self.meta_author.grid(row=2, column=1, sticky="ew", pady=2)
-
-        # --- FPS ---
-        ctk.CTkLabel(meta, text="Animation FPS:").grid(
-            row=3, column=0, sticky="w", pady=2)
-        self.meta_fps = ctk.CTkEntry(meta, width=80, justify="center")
-        self.meta_fps.insert(0, self.doc.fps)
-        self.meta_fps.grid(row=3, column=1, sticky="ew", pady=2)
-
-        # keep the slider -> FPS sync
-        def _synch_from_slider(*_):
-            try:
-                fps = round(1000 / max(1, self.frame_time_var.get()))
-                self.meta_fps.delete(0, "end")
-                self.meta_fps.insert(0, str(fps))
-            except Exception as e:
-                logging.error(e)
-
-        self.frame_time_var.trace_add("write", _synch_from_slider)
-
-        # --- Loop toggle ---
-        ctk.CTkLabel(meta, text="Loop:").grid(
-            row=4, column=0, sticky="w", pady=2)
-        self.meta_loop = ctk.BooleanVar(value=self.doc.loop)
-        ctk.CTkCheckBox(meta, text="", variable=self.meta_loop).grid(
-            row=4, column=1, sticky="w", pady=2)
-
-        # --- Tags ---
-        ctk.CTkLabel(meta, text="Tags:").grid(
-            row=5, column=0, sticky="w", pady=2)
-        self.meta_tags = ctk.CTkEntry(meta)
-        self.meta_tags.insert(0, ", ".join(self.doc.tags or []))
-        self.meta_tags.grid(row=5, column=1, sticky="ew", pady=2)
-
-        # --- Properties ---
-        ctk.CTkLabel(meta, text="Properties:").grid(
-            row=6, column=0, sticky="nw", pady=(6, 2))
-        flags_box = ctk.CTkFrame(meta, fg_color="transparent")
-        flags_box.grid(row=6, column=1, sticky="w", pady=(6, 2))
-
-        self.prop_collision = ctk.BooleanVar(
-            value=self.doc.properties.get("collision", False))
-        self.prop_static = ctk.BooleanVar(
-            value=self.doc.properties.get("static", False))
-        self.prop_background = ctk.BooleanVar(
-            value=self.doc.properties.get("background", False))
-        self.prop_player = ctk.BooleanVar(
-            value=self.doc.properties.get("player", False))
-
-        ctk.CTkCheckBox(flags_box, text="Collision",
-                        variable=self.prop_collision).grid(sticky="w")
-        ctk.CTkCheckBox(flags_box, text="Static Asset",
-                        variable=self.prop_static).grid(sticky="w")
-        ctk.CTkCheckBox(flags_box, text="Background",
-                        variable=self.prop_background).grid(sticky="w")
-        ctk.CTkCheckBox(flags_box, text="Player Character",
-                        variable=self.prop_player).grid(sticky="w")
-
-        def _bind_autoapply(widget, event_type="<FocusOut>"):
-            """Bind automatic metadata save to widget change or focus loss."""
-            if hasattr(widget, "bind"):  # only bind real widgets
-                widget.bind(event_type, lambda event: self._apply_metadata())
-
-        # only bind entry widgets
-        for entry in (
-                self.meta_name,
-                self.meta_author,
-                self.meta_fps,
-                self.meta_tags):
-            _bind_autoapply(entry)
-
-        # trace BooleanVars instead
-        for var in (
-                self.meta_loop,
-                self.prop_collision,
-                self.prop_static,
-                self.prop_background,
-                self.prop_player):
-            # three-arg lambda to match trace_add signature
-            var.trace_add(
-                "write", lambda var_name, index, mode: self._apply_metadata())
-
-    def _apply_metadata(self) -> None:
-        """ Synch UI -> SpriteDoc """
-        if getattr(self, '_suspend_autoapply', False):
-            return
-
-        self.doc.name = self.meta_name.get().strip()
-        self.doc.author = self.meta_author.get().strip()
-        self.doc.fps = int(self.meta_fps.get())
-        self.doc.loop = self.meta_loop.get()
-
-        tags_raw = self.meta_tags.get().strip()
-        self.doc.tags = [t.strip() for t in tags_raw.split(',') if t.strip()]
-
-        self.doc.properties = {
-            'collision': self.prop_collision.get(),
-            'static': self.prop_static.get(),
-            'background': self.prop_background.get(),
-            'player': self.prop_player.get()}
-
-        self._show_saved_status()
-
-    def _show_saved_status(self) -> None:
-        if getattr(self, '_suspend_autoapply', False):
-            return
-
-        if hasattr(self, '_save_label'):
-            self._save_label.destroy()
-
-        self._save_label = ctk.CTkLabel(
-            self.main_app.sub_menu, text='✓ Saved', text_color='green')
-
-        self._save_label.place(relx=1.0, rely=1.0, x=-10, y=-10, anchor='se')
-        # noinspection PyTypeChecker
-        self.after(1500, lambda: self._save_label.destroy())
+        Args:
+            parent: The `CTkFrame` in which to embed the metadata controls.
+        """
+        return self.metadata_panel.build(parent)
 
     # --- Actions -------------------------------------------------------------
-
-    def _bind_autoapply(self, widget, event_type='<FocusOut>') -> None:
-        """ Bind automatic metadata save to widget change of focus loss. """
-        widget.bind(event_type, lambda event: self._apply_metadata())
 
     def _on_frame_time_changed(self, value: float) -> None:
         """ Slider <---> entry synch """
         self.frame_time_var.set(int(value))
+
+    def _play_once(self) -> None:
+        """ Quick-and-dirty flip with a short delay """
+        if len(self.doc.frames) <= 1:
+            return
+        start = self.active_frame
+
+        def step(i=0) -> None:
+            self.active_frame = (start + i) % len(self.doc.frames)
+            self.canvas_view.redraw_canvas()
+            self.canvas_view.update_preview()
+            if i + 1 < len(self.doc.frames):
+                self.after(90, step, i + 1)
+            else:
+                self.active_frame = start
+                self.canvas_view.redraw_canvas()
+                self.canvas_view.update_preview()
+
+        step(0)
 
     def _play_loop(self) -> None:
         """ Continuous playback until stopped """
@@ -463,8 +361,8 @@ class SpriteEditor(ctk.CTkFrame):
         if not getattr(self, '_is_playing', False):
             return
         self.active_frame = i % len(self.doc.frames)
-        self._redraw_canvas()
-        self._update_preview()
+        self.canvas_view.redraw_canvas()
+        self.canvas_view.update_preview()
         delay = max(1, self.frame_time_var.get())
         self.after(delay, self._loop_step, self.active_frame + 1)
 
@@ -472,10 +370,10 @@ class SpriteEditor(ctk.CTkFrame):
         """ Stop looping playback """
         self._is_playing = False
 
-    def _refresh_all(self) -> None:
+    def refresh_all(self) -> None:
         self._rebuild_frames_strip()
-        self._redraw_canvas()
-        self._update_preview()
+        self.canvas_view.redraw_canvas()
+        self.canvas_view.update_preview()
 
     def _rebuild_frames_strip(self) -> None:
         for b in self.frame_buttons:
@@ -485,8 +383,8 @@ class SpriteEditor(ctk.CTkFrame):
         for idx, _ in enumerate(self.doc.frames):
             def switch(i=idx) -> None:
                 self.active_frame = i
-                self._redraw_canvas()
-                self._update_preview()
+                self.canvas_view.redraw_canvas()
+                self.canvas_view.update_preview()
                 self._rebuild_frames_strip()
 
             label = f'[{idx + 1}]'
@@ -497,131 +395,7 @@ class SpriteEditor(ctk.CTkFrame):
             btn.grid(padx=2, pady=2)
             self.frame_buttons.append(btn)
 
-    def _redraw_canvas(self, *_) -> None:
-        if not hasattr(self, 'canvas_img_id'):
-            self.canvas_img_id = self.canvas.create_image(0, 0, anchor='nw')
-        w = self.doc.width * self.cell_px
-        h = self.doc.height * self.cell_px
-        self.canvas.configure(width=w, height=h)
-        self.canvas.delete('grid')
-
-        # Draw onion (previous frame) faint
-        if self.onion_skin.get() and self.active_frame > 0:
-            prev = self.doc.frames[self.active_frame - 1].pixels
-            self._draw_matrix(prev, alpha=90)
-
-        # Draw current frame
-        matrix = self.doc.frames[self.active_frame].pixels
-
-        self._draw_matrix(matrix, alpha=255)
-
-        # Grid overlay
-        for y in range(self.doc.height + 1):
-            self.canvas.create_line(
-                0, y * self.cell_px, w, y * self.cell_px,
-                fill=self.grid_color, tags='grid'
-            )
-        for x in range(self.doc.width + 1):
-            self.canvas.create_line(
-                x * self.cell_px, 0, x * self.cell_px, h,
-                fill=self.grid_color, tags='grid'
-            )
-
-        self.canvas.configure(scrollregion=(0, 0, w, h))
-
-    def _draw_matrix(self, matrix: list[list[int]], alpha: int) -> None:
-        h, w = len(matrix), len(matrix[0])
-
-        # render current (and optional onion skin) into ONE image
-        base = Image.new('RGBA', (w, h), (0, 0, 0, 0))
-        px = base.load()
-
-        # onion skin (previous frame) faint
-        if self.onion_skin.get() and self.active_frame > 0 and alpha == 255:
-            prev = self.doc.frames[self.active_frame - 1].pixels
-            for y in range(h):
-                prow = prev[y]
-                for x, idx in enumerate(prow):
-                    if idx < 0:
-                        continue
-                    r, g, b, a = self.doc.palette[idx]
-                    px[x, y] = (r, g, b, 90)  # ghost alpha
-
-        # current frame
-        for y in range(h):
-            row = matrix[y]
-            for x, idx in enumerate(row):
-                if idx < 0:
-                    continue
-                r, g, b, a = self.doc.palette[idx]
-                px[x, y] = (r, g, b, a)
-
-        # scale for zoom
-        if self.cell_px != 1:
-            base = base.resize((w * self.cell_px, h * self.cell_px),
-                               Resampling.NEAREST)
-
-        # store & reuse PhotoImage
-        self._canvas_img = ImageTk.PhotoImage(base)
-        self.canvas.itemconfig(self.canvas_img_id, image=self._canvas_img)
-
-        # update scroll bounds
-        self.canvas.configure(scrollregion=(0, 0, base.width, base.height))
-
-    def _update_preview(self) -> None:
-        """ Render current frame to a small PIL image and thumbnail it """
-        img = self._render_frame(self.active_frame, scale=1)
-        if img.width < 1 or img.height < 1:
-            return
-
-        max_size = 256  # max width or height in pixels (scaled)
-        scale = min(4, int(max_size / max(img.width, img.height)))
-        preview = img.resize(
-            (int(img.width * scale), int(img.height * scale)),
-            Resampling.NEAREST)
-
-        self._preview_photo = ctk.CTkImage(
-            light_image=preview,
-            dark_image=preview,
-            size=(preview.width, preview.height))
-
-        self.preview_label.configure(image=self._preview_photo)
-
-    def _event_to_cell(self, event) -> tuple[int, int]:
-        cx = self.canvas.canvasx(event.x)
-        cy = self.canvas.canvasy(event.y)
-        x = int(cx // self.cell_px)
-        y = int(cy // self.cell_px)
-        return x, y
-
-    def _paint_at(self, event) -> None:
-        self.focus_set()
-        x, y = self._event_to_cell(event)
-        if not (0 <= x < self.doc.width and 0 <= y < self.doc.height):
-            return
-        mat = self.doc.frames[self.active_frame].pixels
-
-        if self.fill_mode:
-            target = mat[y][x]
-            if target == self.active_color_index:
-                return
-            self._flood_fill(mat, x, y, target, self.active_color_index)
-        else:
-            if mat[y][x] == self.active_color_index:
-                return
-            mat[y][x] = self.active_color_index
-
-        self._redraw_canvas()
-        self._update_preview()
-
-    def _eyedrop_at(self, event) -> None:
-        x, y = self._event_to_cell(event)
-        if not (0 <= x < self.doc.width and 0 <= y < self.doc.height):
-            return
-        idx = self.doc.frames[self.active_frame].pixels[y][x]
-        self._select_color(idx)
-
-    def _select_color(self, idx: int) -> None:
+    def select_color(self, idx: int) -> None:
         self.active_color_index = idx
         for i, btn in enumerate(self.palette_buttons):
             if i == idx:
@@ -630,60 +404,42 @@ class SpriteEditor(ctk.CTkFrame):
                 btn.configure(border_color='#222', border_width=2)
 
     def _enable_fill_mode(self) -> None:
-        self.fill_mode = not self.fill_mode
+        """ Enable fill mode """
+        self.fill_mode = not self.fill_mode  # Bool flip
         print(f"Fill mode {'on' if self.fill_mode else 'off'}")
         # TODO: make button selection visible
 
-    @staticmethod
-    def _flood_fill(
-            mat, x, y, target_color: int, replacement_color: int) -> None:
-        """ Recursive fill (4-directional). """
-        if target_color == replacement_color:
-            return
-        h, w = len(mat), len(mat[0])
-        stack = [(x, y)]
-        while stack:
-            cx, cy = stack.pop()
-            if cx < 0 or cy < 0 or cx >= w or cy >= h:
-                continue
-            if mat[cy][cx] != int(target_color):
-                continue
-            mat[cy][cx] = int(replacement_color)
-            stack.extend(
-                [(cx + 1, cy), (cx - 1, cy), (cx, cy + 1), (cx, cy - 1)])
-
-    def _zoom_changed(self, value) -> None:
-        self.cell_px = int(float(value))
-        self._redraw_canvas()
-
     def _add_frame(self) -> None:
+        """ Add a new blank frame """
         blank = [[-1 for _ in range(self.doc.width)] for _ in
                  range(self.doc.height)]
         self.doc.frames.append(SpriteFrame(blank))
         self.active_frame = len(self.doc.frames) - 1
-        self._refresh_all()
+        self.refresh_all()
 
     def _dup_frame(self) -> None:
+        """ Duplicates the selected frame """
         src = self.doc.frames[self.active_frame].pixels
         dup = [row[:] for row in src]
         self.doc.frames.append(SpriteFrame(dup))
         self.active_frame = len(self.doc.frames) - 1
-        self._refresh_all()
+        self.refresh_all()
 
     def _delete_frame(self) -> None:
+        """ Delete the selected frame """
         if len(self.doc.frames) <= 1:
             return
         del self.doc.frames[self.active_frame]
         self.active_frame = max(0, self.active_frame - 1)
-        self._refresh_all()
+        self.refresh_all()
 
     def _clear_frame(self) -> None:
         self.doc.frames[self.active_frame].pixels = [
             [-1 for _ in range(self.doc.width)] for _ in
             range(self.doc.height)]
-        self._refresh_all()
+        self.refresh_all()
 
-    def _resize_grid(self, w: int, h: int) -> None:
+    def resize_grid(self, w: int, h: int) -> None:
         """ Safe resize while keeping content where it fits (top-left) """
         new_frames: list[SpriteFrame] = []
         for frame in self.doc.frames:
@@ -695,201 +451,38 @@ class SpriteEditor(ctk.CTkFrame):
             new_frames.append(SpriteFrame(new))
         self.doc.width, self.doc.height = w, h
         self.doc.frames = new_frames
-        self._refresh_all()
+        self.refresh_all()
 
     # --- File I/O ------------------------------------------------------------
 
     def _new_doc(self) -> None:
-        self.doc = SpriteDoc.empty(16, 16, self.default_palette, name='sprite')
-        self.active_frame = 0
-        self.last_saved_path = None
-        self._refresh_all()
+        self.io_manager.new_doc()
 
     def _open_doc(self) -> None:
-        path = askopenfilename(
-            title='Open Sprite JSON',
-            filetypes=[('Sprite JSON', '*.json'), ('All Files', '*.*')])
-        if not path:
-            return
-
-        with open(path, 'r', encoding='utf-8') as f:
-            data = json.load(f)
-
-        self.doc = SpriteDoc.from_json(data)
-        self.active_frame = 0
-        self.last_saved_path = Path(path)
-        self._refresh_all()
-
-        # --- suspend trace/autoapply while updating UI ---
-        self._suspend_autoapply = True
-        try:
-            if self.meta_name:
-                self.meta_name.delete(0, 'end')
-                self.meta_name.insert(0, self.doc.name)
-            if self.meta_author:
-                self.meta_author.delete(0, 'end')
-                self.meta_author.insert(0, self.doc.author)
-            if self.meta_fps:
-                self.meta_fps.delete(0, 'end')
-                self.meta_fps.insert(0, self.doc.fps)
-            if self.meta_tags:
-                self.meta_tags.delete(0, 'end')
-                self.meta_tags.insert(0, ', '.join(self.doc.tags or []))
-            if self.meta_loop:
-                self.meta_loop.set(self.doc.loop)
-
-            # now update the property checkboxes as well
-            if hasattr(self.doc, 'properties'):
-                props = self.doc.properties
-                self.prop_collision.set(props.get('collision', False))
-                self.prop_static.set(props.get('static', False))
-                self.prop_background.set(props.get('background', False))
-                self.prop_player.set(props.get('player', False))
-        finally:
-            self._suspend_autoapply = False
+        self.io_manager.open_doc()
 
     def _save_doc(self) -> None:
-        if self.last_saved_path is None:
-            self._save_as_doc()
-            return
-
-        data = self.doc.to_json()
-        text = json.dumps(data, indent=2)
-
-        # --- Compactify small arrays (Like palette colors) ---
-        # Convert [\n 0,\n 0,\n 0,\n 244] -> [ 0, 0, 0, 255 ]
-        text = re.sub(
-            r'\[\s*((?:-?\d+\s*,\s*)*-?\d+)\s*]',
-            lambda m: "[ " + re.sub(r'\s*,\s*', ', ', m.group(1)) + " ]",
-            text)
-
-        with open(self.last_saved_path, 'w', encoding='utf-8') as f:
-            f.write(text)
+        self.io_manager.save_doc()
 
     def _save_as_doc(self) -> None:
-        path = asksaveasfilename(
-            title='Save Sprite JSON', defaultextension='.json',
-            filetypes=[('Sprite JSON', '*.json'), ('All Files', '*.*')])
-
-        if not path:
-            return
-
-        self.last_saved_path = Path(path)
-        self._save_doc()
+        self.io_manager.save_as_doc()
 
     def _export_png(self):
-        path = asksaveasfilename(
-            title='Export PNG (current frame)',
-            defaultextension='.png',
-            filetypes=[('PNG image', '*.png'), ('All Files', '*.*')])
-
-        if not path:
-            return
-
-        img = self._render_frame(self.active_frame, scale=1)
-        img.save(path, 'PNG')
-
-        logging.info(f'Exported PNG to {path}')
+        self.io_manager.export_png()
 
     def _export_gif(self):
-        path = asksaveasfilename(
-            title='Export GIF (animated gif)',
-            defaultextension='.gif',
-            filetypes=[('GIF image', '*.gif'), ('All Files', '*.*')])
-
-        if not path:
-            return
-
-        images = [self._render_frame(i) for i in range(len(self.doc.frames))]
-        frame_duration = max(1, self.frame_time_var.get())
-
-        images[0].save(
-            path,
-            save_all=True,
-            append_images=images[1:],
-            duration=frame_duration,
-            loop=0 if self.doc.loop else 1,
-            disposal=2,
-            transparency=0)
-
-        logging.info(f'Exported GIF to {path}')
+        self.io_manager.export_gif()
 
     def _render_frame(self, index: int, scale: int = 1) -> Image.Image:
         """ Render a frame to a PIL image using the palette """
-        w, h = self.doc.width, self.doc.height
-        img = Image.new('RGBA', (w, h), (0, 0, 0, 0))
-        px = img.load()
-        mat = self.doc.frames[index].pixels
-        for y in range(h):
-            for x in range(w):
-                idx = mat[y][x]
-                if idx < 0:
-                    continue
-                r, g, b, a = self.doc.palette[idx]
-                px[x, y] = (int(r), int(g), int(b), int(a))
-        if scale > 1:
-            img = img.resize((w * scale, h * scale), Resampling.NEAREST)
-        return img
+        return self.canvas_view.render_frame(index, scale)
 
     def _import_image(self) -> None:
-        path = askopenfilename(
-            title='Import sprite image',
-            filetypes=[('Image files', '*.png;*.jpg;*.jpeg;*.bmp'),
-                       ('All Files', '*.*')])
-        if not path:
-            return
-
-        img = Image.open(path).convert('RGBA')
-        w, h = img.size
-        self._resize_grid(w, h)
-
-        px = img.load()
-        matrix = [[-1 for _ in range(w)] for _ in range(h)]
-
-        for y in range(h):
-            for x in range(w):
-                r, g, b, a = px[x, y]
-                if a < 32:  # transparent
-                    matrix[y][x] = -1
-                    continue
-                matrix[y][x] = self._find_closest_color((r, g, b, a))
-
-        self.doc.frames[self.active_frame].pixels = matrix
-        self._refresh_all()
+        self.io_manager.import_image()
 
     def _find_closest_color(self, rgba: tuple[Any, ...]) -> int:
         """ Find the closest color to rgba """
-        r1, g1, b1, a1 = rgba
-        best_idx = 0
-        best_dist = float('inf')
-        for i, (r2, g2, b2, a2) in enumerate(self.doc.palette):
-            dr, dg, db = r1 - r2, g1 - g2, b1 - b2
-            dist = dr * dr + dg * dg + db * db
-            if dist < best_dist:
-                best_idx = i
-                best_dist = dist
-        return best_idx
-
-    # --- Tiny one-shot animation preview (just flips frames once) ------------
-
-    def _play_once(self) -> None:
-        """ Quick-and-dirty flip with a short delay """
-        if len(self.doc.frames) <= 1:
-            return
-        start = self.active_frame
-
-        def step(i=0) -> None:
-            self.active_frame = (start + i) % len(self.doc.frames)
-            self._redraw_canvas()
-            self._update_preview()
-            if i + 1 < len(self.doc.frames):
-                self.after(90, step, i + 1)
-            else:
-                self.active_frame = start
-                self._redraw_canvas()
-                self._update_preview()
-
-        step(0)
+        return self.io_manager.find_closest_color(rgba)
 
 
 # --- Helpers -----------------------------------------------------------------

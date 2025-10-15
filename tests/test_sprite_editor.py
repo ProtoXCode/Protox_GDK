@@ -1,7 +1,7 @@
 import customtkinter as ctk
 import pytest
 
-from gui.view_sprite import SpriteEditor
+from gui.sprite_editor import SpriteEditor
 
 
 @pytest.fixture
@@ -36,12 +36,12 @@ def test_find_closest_color_returns_best_match(app):
 
 def test_resize_grid_preserves_pixels(app):
     app.doc.frames[0].pixels[0][0] = 1
-    app._resize_grid(32, 32)
+    app.resize_grid(32, 32)
     assert app.doc.frames[0].pixels[0][0] == 1
     assert app.doc.width == 32
 
 
 def test_color_select_highlights_button(app):
-    app._select_color(2)
+    app.select_color(2)
     app.update_idletasks()
     assert app.active_color_index == 2
