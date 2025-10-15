@@ -3,7 +3,6 @@ from __future__ import annotations
 import re
 import json
 import logging
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional, Any
 from tkinter.filedialog import askopenfilename, asksaveasfilename
@@ -14,79 +13,7 @@ from PIL import Image, ImageTk
 from PIL.Image import Resampling
 
 from gdk.palette import default_palette
-
-
-# --- Data model --------------------------------------------------------------
-
-@dataclass
-class SpriteFrame:
-    # 2D matrix: int palette index or -1 for transparent
-    pixels: list[list[int]]
-
-
-@dataclass
-class SpriteDoc:
-    width: int
-    height: int
-    palette: list[list[int]]
-    frames: list[SpriteFrame]
-    name: str = 'unnamed'
-    fps: int = 10
-    loop: bool = True
-    author: str = 'unknown'
-    tags: list[str] = None
-    properties: dict[str, Any] = None
-
-    @staticmethod
-    def empty(width: int, height: int, palette: list[list[int]],
-              name: str = 'unnamed') -> 'SpriteDoc':
-        blank = [[-1 for _ in range(width)] for _ in range(height)]
-        return SpriteDoc(width=width, height=height, palette=palette,
-                         frames=[SpriteFrame(blank)], name=name, tags=[],
-                         properties={
-                             'collision': False,
-                             'static': False,
-                             'background': False,
-                             'player': False
-                         })
-
-    def to_json(self) -> dict:
-        return {
-            'name': self.name,
-            'width': self.width,
-            'height': self.height,
-            'fps': self.fps,
-            'loop': self.loop,
-            'author': self.author,
-            'tags': self.tags,
-            'palette': self.palette,
-            'frames': [f.pixels for f in self.frames],
-            'properties': self.properties or {}
-        }
-
-    @staticmethod
-    def from_json(d: dict) -> 'SpriteDoc':
-        return SpriteDoc(
-            name=d.get('name', 'unnamed'),
-            width=int(d['width']),
-            height=int(d['height']),
-            fps=int(d.get('fps', 10)),
-            loop=bool(d.get('loop', True)),
-            author=d.get('author', 'unknown'),
-            tags=d.get('tags', []),
-            palette=[list(map(int, rgba)) for rgba in d['palette']],
-            frames=[SpriteFrame(
-                [[int(v) for v in row] for row in m]) for m in d['frames']],
-            properties=d.get('properties', {
-                'collision': False,
-                'static': False,
-                'background': False,
-                'player': False
-            })
-        )
-
-
-# --- Editor widget -----------------------------------------------------------
+from .core import SpriteFrame, SpriteDoc
 
 
 class SpriteEditor(ctk.CTkFrame):
@@ -218,7 +145,7 @@ class SpriteEditor(ctk.CTkFrame):
                 corner_radius=4,
                 border_width=2,
                 border_color='#222',
-                command=lambda colour=i: self._select_color(color)
+                command=lambda sel_color=i: self._select_color(sel_color)
             )
             r, c = divmod(i, cols)
             btn.grid(row=r, column=c, padx=3, pady=3)
@@ -585,6 +512,7 @@ class SpriteEditor(ctk.CTkFrame):
 
         # Draw current frame
         matrix = self.doc.frames[self.active_frame].pixels
+
         self._draw_matrix(matrix, alpha=255)
 
         # Grid overlay
@@ -707,8 +635,9 @@ class SpriteEditor(ctk.CTkFrame):
         # TODO: make button selection visible
 
     @staticmethod
-    def _flood_fill(mat, x, y, target_color, replacement_color) -> None:
-        """Recursive fill (4-directional)."""
+    def _flood_fill(
+            mat, x, y, target_color: int, replacement_color: int) -> None:
+        """ Recursive fill (4-directional). """
         if target_color == replacement_color:
             return
         h, w = len(mat), len(mat[0])
@@ -717,9 +646,9 @@ class SpriteEditor(ctk.CTkFrame):
             cx, cy = stack.pop()
             if cx < 0 or cy < 0 or cx >= w or cy >= h:
                 continue
-            if mat[cy][cx] != target_color:
+            if mat[cy][cx] != int(target_color):
                 continue
-            mat[cy][cx] = replacement_color
+            mat[cy][cx] = int(replacement_color)
             stack.extend(
                 [(cx + 1, cy), (cx - 1, cy), (cx, cy + 1), (cx, cy - 1)])
 
