@@ -15,7 +15,7 @@
 Each editor is its own creative module:
 
 | Editor               | Purpose                                                                        | Output                         |
-| -------------------- | ------------------------------------------------------------------------------ | ------------------------------ |
+|----------------------| ------------------------------------------------------------------------------ | ------------------------------ |
 | 🎨 **Sprite Editor** | Draw and animate sprites using a palette-based grid.                           | `.sprite.json`, `.png`, `.gif` |
 | 🧱 **Level Editor**  | Arrange tiles and props into maps or stages.                                   | `.level.json`                  |
 | 🎮 **Scene Editor**  | Combine levels and sprites into storyboards, cutscenes, or gameplay sequences. | `.scene.json`                  |
@@ -138,16 +138,16 @@ For storyboards, sequences, or game logic.
 
 ## 🔮 Roadmap
 
-| Feature                                  | Status       |
-| ---------------------------------------- | ------------ |
-| Sprite animation → GIF export            | ✅ Done      |
-| Level editor drag-drop interface         | 🚧 Planned   |
-| Scene editor with keyframe timeline      | 🚧 Planned   |
-| Asset browser / palette folders          | 🧩 Concept   |
-| Pygame runtime loader for `.sprite.json` | 🧠 Research  |
-| Music events, make music control gameplay| 🧠 Research  |
-| Binary `.gdkimg` format (compressed)     | 🧪 Prototype |
-| Multi-tool workspace saving              | 🔜 Future    |
+| Feature                                   | Status       |
+|-------------------------------------------| ------------ |
+| Sprite animation → GIF export             | ✅ Done      |
+| Level editor drag-drop interface          | 🚧 Planned   |
+| Scene editor with keyframe timeline       | 🚧 Planned   |
+| Asset browser / palette folders           | 🧩 Concept   |
+| Pygame runtime loader for `.sprite.json`  | 🧠 Research  |
+| Music events, make music control gameplay | 🧠 Research  |
+| Binary `.gdkimg` format (compressed)      | 🧪 Prototype |
+| Multi-tool workspace saving               | 🔜 Future    |
 
 
 ---
@@ -174,8 +174,14 @@ ProtoX_GDK/
 │  ├─ protox_tools.py
 │  └─ config_loader.py
 ├─ gui/
+│  ├─ sprite_editor/ 
+│  │  ├─ __init__.py
+│  │  ├─ canvas_view.py
+│  │  ├─ core.py
+│  │  ├─ editor.py
+│  │  ├─ io_manager.py    
+│  │  └─ metadata.py  
 │  ├─ main_window.py
-│  ├─ view_sprite.py
 │  ├─ view_level.py
 │  ├─ view_scene.py
 │  └─ view_splash.py
