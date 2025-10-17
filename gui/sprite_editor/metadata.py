@@ -210,8 +210,8 @@ class MetadataPanel:
             self._suspend_autoapply = previous
 
 
-# Late import for type checking
+# Late import for typing only
 from typing import TYPE_CHECKING
 
-if TYPE_CHECKING:  # pragma: no cover
+if TYPE_CHECKING:
     from .editor import SpriteEditor

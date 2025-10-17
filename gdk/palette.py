@@ -50,3 +50,75 @@ default_palette = [
     [255, 170, 200, 255], [255, 150, 255, 255],
     [180, 255, 255, 255], [120, 220, 255, 255],
 ]
+
+extended_palette_256 = []
+
+
+def _add_range(base, count, step):
+    """Generate gradient range (r, g, b, a=255)."""
+    for i in range(count):
+        val = [min(255, c + step * i) for c in base[:3]]
+        extended_palette_256.append([*val, 255])
+
+
+# --- 0–15 : Neutrals / grayscale ---
+for i in range(16):
+    g = int(i * 255 / 15)
+    extended_palette_256.append([g, g, g, 255])
+
+# --- 16–47 : Reds to Yellows ---
+for r in range(0, 256, 16):
+    extended_palette_256.append([r, 0, 0, 255])
+for o in range(0, 256, 16):
+    extended_palette_256.append([255, o, 0, 255])
+for y in range(0, 256, 16):
+    extended_palette_256.append([255, 255, y, 255])
+
+# --- 48–79 : Greens ---
+for g in range(0, 256, 16):
+    extended_palette_256.append([0, g, 0, 255])
+for g in range(0, 256, 16):
+    extended_palette_256.append([0, g, 128, 255])
+for g in range(0, 256, 16):
+    extended_palette_256.append([0, g, 255, 255])
+
+# --- 80–111 : Blues / Cyans ---
+for b in range(0, 256, 16):
+    extended_palette_256.append([0, 0, b, 255])
+for b in range(0, 256, 16):
+    extended_palette_256.append([0, 128, b, 255])
+for b in range(0, 256, 16):
+    extended_palette_256.append([0, 255, b, 255])
+
+# --- 112–143 : Magentas / Purples ---
+for m in range(0, 256, 16):
+    extended_palette_256.append([m, 0, m, 255])
+for m in range(0, 256, 16):
+    extended_palette_256.append([128, 0, m, 255])
+for m in range(0, 256, 16):
+    extended_palette_256.append([255, 0, m, 255])
+
+# --- 144–175 : Browns / Sands ---
+browns = [
+    [60, 40, 20], [90, 60, 30], [120, 80, 40],
+    [150, 100, 50], [180, 120, 60], [210, 150, 90],
+    [240, 180, 120], [255, 210, 150]]
+for c in browns:
+    extended_palette_256.append([*c, 255])
+    extended_palette_256.append([min(255, c[0] + 30),
+                                 min(255, c[1] + 20),
+                                 min(255, c[2] + 10), 255])
+
+# --- 176–239 : Pastels / Highlights ---
+for i in range(64):
+    val = 192 + int(i * 63 / 64)
+    extended_palette_256.append([val, 255, val, 255])
+
+# --- 240–255 : Transparency range / specials ---
+for i in range(16):
+    extended_palette_256.append([0, 0, 0, i * 16])
+
+PALETTES = {
+    'ProtoX 64': default_palette,
+    'VGA 256': extended_palette_256
+}

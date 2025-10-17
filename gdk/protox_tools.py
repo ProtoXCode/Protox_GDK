@@ -80,10 +80,10 @@ class ProtoXToolKit:
         image = image.convert('RGBA')
 
         # Create a mask with rounded rectangle
-        mask = Image.new('L', image.size, 0)
+        mask = Image.new(mode='L', size=image.size, color=0)
         draw = ImageDraw.Draw(mask)
         draw.rounded_rectangle(
-            (0, 0, image.width, image.height), radius=radius, fill=255)
+            xy=(0, 0, image.width, image.height), radius=radius, fill=255)
 
         # Apply the mask to the image
         rounded = image.copy()
