@@ -2,13 +2,14 @@ from __future__ import annotations
 
 from pathlib import Path
 from typing import Optional, Any
-from functools import partial
+from functools import partial, lru_cache
+import logging
 
 import customtkinter as ctk
 from PIL import Image
 from customtkinter import CTkFrame
 
-from gdk.palette import default_palette
+from gdk.palette import PALETTES
 from .canvas_view import CanvasView
 from .core import SpriteFrame, SpriteDoc
 from .io_manager import SpriteIOManager
@@ -31,13 +32,12 @@ class SpriteEditor(ctk.CTkFrame):
         self.padding = 10
         self.grid_color = '#444444'
         self.btn_bar_width = 30
-
-        # Default palette (Amiga-ish)
-        self.default_palette = default_palette
+        self.cols = 4  # how many buttons per row (set for 64)
+        self.btn_size = 25
 
         # State
         self.doc: SpriteDoc = SpriteDoc.empty(
-            width=16, height=16, palette=self.default_palette, name='sprite')
+            width=16, height=16, palette=PALETTES['ProtoX 64'], name='sprite')
         self.active_frame = 0
         self.active_color_index = 1  # Default: black
         self.onion_skin = ctk.BooleanVar(value=False)
@@ -45,6 +45,7 @@ class SpriteEditor(ctk.CTkFrame):
 
         # Default values
         self.fill_mode = False
+        self.palette_buttons: list[ctk.CTkButton] = []
 
         # Helper components
         self.canvas_view = CanvasView(self)
@@ -137,38 +138,47 @@ class SpriteEditor(ctk.CTkFrame):
                  pady=self.padding)
         box.columnconfigure(0, weight=1)
 
-        ctk.CTkLabel(box, text='Palette').grid(padx=8, pady=(8, 4))
+        # --- Palette selector header ---
+        header_frame = ctk.CTkFrame(box, fg_color='transparent')
+        header_frame.grid(row=0, column=0, sticky='ew', padx=8, pady=(8, 4))
+        header_frame.columnconfigure(1, weight=1)
 
-        self.palette_buttons: list[ctk.CTkButton] = []
+        ctk.CTkLabel(header_frame, text='Palette:').grid(
+            row=0, column=0, sticky='w')
 
-        # --- grid of color buttons ---
+        self.palette_var = ctk.StringVar(value='ProtoX 64')
+
+        def _on_palette_change(choice: str) -> None:
+            """ Switch palette and rebuild buttons safely """
+            old_palette = self.doc.palette
+            new_palette = PALETTES[choice]
+
+            self._remap_palette(old_palette, new_palette)
+            self._set_palette_button_config(choice)
+            self.rebuild_color_buttons(
+                self.palette_frame, self.cols, self.btn_size)
+            self.canvas_view.redraw_canvas()
+            self.canvas_view.update_preview()
+
+        ctk.CTkOptionMenu(
+            header_frame,
+            variable=self.palette_var,
+            values=list(PALETTES.keys()),
+            command=_on_palette_change,
+            width=120
+        ).grid(row=0, column=1, sticky='e')
+
+        # --- Grid of color buttons ---
         grid_frame = ctk.CTkFrame(box)
         grid_frame.grid(row=1, column=0, padx=6, pady=4)
         grid_frame.columnconfigure(tuple(range(4)), weight=1)
+        self.palette_frame = grid_frame
 
-        cols = 4  # how many buttons per row
-        btn_size = 25
+        self.rebuild_color_buttons(grid_frame, self.cols, self.btn_size)
 
-        for i, rgba in enumerate(self.doc.palette):
-            btn = ctk.CTkButton(
-                grid_frame,
-                text='',
-                width=btn_size,
-                height=btn_size,
-                fg_color=_rgba_hex(rgba),
-                corner_radius=4,
-                border_width=2,
-                border_color='#222',
-                command=lambda sel_color=i: self.select_color(sel_color)
-            )
-            r, c = divmod(i, cols)
-            btn.grid(row=r, column=c, padx=3, pady=3)
-            self.palette_buttons.append(btn)
-
-        # --- special tools row ---
-        width = cols * (btn_size + 6) - 6  # About the grid width
-        special_frame = ctk.CTkFrame(box)
-        special_frame.configure(width=width)
+        # --- Special tools row ---
+        width = self.cols * (self.btn_size + 6) - 6  # About the grid width
+        special_frame = ctk.CTkFrame(box, width=width)
         special_frame.grid(padx=6, pady=(8, 6), sticky='ew')
         special_frame.columnconfigure(0, weight=1)
 
@@ -204,6 +214,84 @@ class SpriteEditor(ctk.CTkFrame):
         )
         self.zoom.set(self.canvas_view.cell_px)
         self.zoom.grid(row=1, column=0, sticky='ew', padx=2, pady=(0, 4))
+
+    def _set_palette_button_config(self, choice: str) -> None:
+        """ Resize the color buttons """
+        if choice == 'ProtoX 64':
+            self.cols = 4
+            self.btn_size = 25
+        else:
+            self.cols = 8
+            self.btn_size = 20
+
+    def rebuild_color_buttons(self, frame, cols, btn_size) -> None:
+        """ Clear and rebuild color buttons when palette changes """
+        for child in frame.winfo_children():
+            child.destroy()
+
+        self.palette_buttons.clear()
+
+        for i, rgba in enumerate(self.doc.palette):
+            btn = ctk.CTkButton(
+                frame,
+                text='',
+                width=btn_size,
+                height=btn_size,
+                fg_color=_rgba_hex(rgba),
+                corner_radius=4,
+                border_width=0,
+                border_color='#222',
+                command=lambda idx=i: self.select_color(idx)
+            )
+            r, c = divmod(i, cols)
+            btn.grid(row=r, column=c, padx=3, pady=3)
+            self.palette_buttons.append(btn)
+
+    def _remap_palette(self, old_palette: list[list[int]],
+                       new_palette: list[list[int]]) -> None:
+        """
+        Remap pixel indices by color similarity between two palettes.
+        Ignores alpha and clamps invalid indices.
+        """
+
+        old_palette_rgb = [p[:3] for p in old_palette]
+        new_palette_rgb = [p[:3] for p in new_palette]
+        mapping = {}
+
+        @lru_cache(maxsize=4096)
+        def color_distance(c1, c2):
+            return ((c1[0] - c2[0]) ** 2 +
+                    (c1[1] - c2[1]) ** 2 +
+                    (c1[2] - c2[2]) ** 2) ** 0.5
+
+        for i, old_rgb in enumerate(old_palette_rgb):
+            best_idx = 0
+            best_dist = float('inf')
+            for j, new_rgb in enumerate(new_palette_rgb):
+                dist = color_distance(tuple(old_rgb), tuple(new_rgb))
+                if dist < best_dist:
+                    best_dist = dist
+                    best_idx = j
+            mapping[i] = best_idx
+
+        total = changed = 0
+        for frame in self.doc.frames:
+            for y, row in enumerate(frame.pixels):
+                for x, val in enumerate(row):
+                    if val < 0 or val >= len(old_palette):
+                        continue
+                    total += 1
+                    new_val = mapping.get(val, 0)
+                    if new_val != val:
+                        changed += 1
+                    row[x] = new_val
+
+        self.doc.palette = new_palette
+        self.canvas_view.redraw_canvas()
+        self.canvas_view.update_preview()
+
+        logging.info(f'Palette remapped {changed}/{total} pixels '
+                     f'({len(old_palette)} -> {len(new_palette)})')
 
     def _build_canvas(self) -> None:
         """

@@ -27,7 +27,13 @@ class MetadataPanel:
     def build(self, parent) -> ctk.CTkFrame:
         meta = ctk.CTkFrame(parent)
         meta.grid(row=0, column=0, sticky='nsew', padx=8, pady=8)
+
+        parent.rowconfigure(1, weight=1)
+        parent.columnconfigure(0, weight=1)
+
+        meta.rowconfigure(0, weight=1)
         meta.columnconfigure(1, weight=1)
+        meta.rowconfigure('all', weight=0)
 
         ctk.CTkLabel(
             meta,
@@ -137,6 +143,9 @@ class MetadataPanel:
         self.show_saved_status()
 
     def show_saved_status(self) -> None:
+        """
+        Displays a small saved message in green in the lower right corner.
+        """
         if self._suspend_autoapply:
             return
         if self._save_label:
