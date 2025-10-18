@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from typing import Optional
+import logging
+from tkinter import messagebox
 
 import customtkinter as ctk
 from PIL import Image, ImageTk
@@ -18,6 +20,7 @@ class CanvasView:
         self._canvas_img: Optional[ImageTk.PhotoImage] = None
         self.preview_label: Optional[ctk.CTkLabel] = None
         self._preview_photo: Optional[ctk.CTkImage] = None
+        self._preview_warned = False
 
     def build(self, parent: ctk.CTkFrame) -> None:
         """ Create the canvas area with scrollbars and mouse bindings. """
@@ -151,19 +154,39 @@ class CanvasView:
 
         The preview is then displayed in the right-hand 'Preview' label.
         """
+        max_size = 256
+
         if not self.preview_label:
             return
+
+        # Prevent duplicate warnings in same update cycle
+        if getattr(self, '_preview_warned', False):
+            return
+        self._preview_warned = True
+        # noinspection PyTypeChecker
+        self.editor.after(
+            ms=2000, func=lambda: setattr(self, '_preview_warned', False))
+        # TODO: Fix this time after numpy optimization!
 
         img = self.render_frame(self.editor.active_frame, scale=1)
         if img.width < 1 or img.height < 1:
             return
 
-        max_size = 256
+        if img.width > 256 or img.height > 256:
+            logging.warning(
+                'Image too large for editor - scaled down for preview.')
+            messagebox.showwarning(title='Image too large',
+                                   message=f'Image too large for preview.\n\n'
+                                           f'Reducing image size to below '
+                                           f'{max_size} x {max_size} pixels.')
+            img = img.resize(
+                (min(img.width, max_size), min(img.height, max_size)),
+                Resampling.NEAREST)
+
         scale = min(4, int(max_size / max(img.width, img.height)))
         preview = img.resize(
             (int(img.width * scale), int(img.height * scale)),
-            Resampling.NEAREST,
-        )
+            Resampling.NEAREST)
 
         self._preview_photo = ctk.CTkImage(
             light_image=preview,

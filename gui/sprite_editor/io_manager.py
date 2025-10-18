@@ -54,6 +54,7 @@ class SpriteIOManager:
         self.editor.palette_var.set(palette_name)
 
         # Sync UI
+        self.editor.doc = SpriteDoc.from_json(data)
         self.editor.active_frame = 0
         self.editor.last_saved_path = Path(path)
         self.editor.rebuild_color_buttons(self.editor.palette_frame, 4, 25)
@@ -178,15 +179,22 @@ class SpriteIOManager:
 
     def find_closest_color(self, rgba: tuple[Any, ...]) -> int:
         """ Find the nearest color index in the active palette """
-        r1, g1, b1, _a1 = rgba
+        r1, g1, b1, a1 = rgba
+        if a1 < 32:
+            return -1  # transparent
+
         best_idx = 0
         best_dist = float('inf')
+
         for i, (r2, g2, b2, _a2) in enumerate(self.editor.doc.palette):
-            dr, dg, db = r1 - r2, g1 - g2, b1 - b2
-            dist = dr * dr + dg * dg + db * db
+            # Basic weighted Euclidean distance (good balance)
+            dr = r1 - r2
+            dg = g1 - g2
+            db = b1 - b2
+            dist = (dr * 0.3) ** 2 + (dg * 0.59) ** 2 + (db * 0.11) ** 2
             if dist < best_dist:
-                best_idx = i
                 best_dist = dist
+                best_idx = i
         return best_idx
 
 
