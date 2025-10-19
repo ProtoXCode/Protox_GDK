@@ -11,7 +11,7 @@ from customtkinter import CTkFrame
 
 from gdk.palette import PALETTES
 from .canvas_view import CanvasView
-from .core import SpriteFrame, SpriteDoc
+from .sprite_core import SpriteFrame, SpriteDoc
 from .io_manager import SpriteIOManager
 from .metadata import MetadataPanel
 

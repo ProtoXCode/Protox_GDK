@@ -11,7 +11,7 @@ import threading
 import customtkinter as ctk
 from PIL import Image
 
-from .core import SpriteDoc
+from .sprite_core import SpriteDoc
 from gdk.palette import PALETTES
 
 
@@ -231,4 +231,4 @@ class SpriteIOManager:
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from .editor import SpriteEditor
+    from .sprite_editor import SpriteEditor

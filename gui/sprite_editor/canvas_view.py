@@ -333,4 +333,4 @@ class CanvasView:
     from typing import TYPE_CHECKING
 
     if TYPE_CHECKING:  # pragma: no cover
-        from .editor import SpriteEditor
+        from .sprite_editor import SpriteEditor

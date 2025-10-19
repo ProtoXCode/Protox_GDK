@@ -223,4 +223,4 @@ class MetadataPanel:
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from .editor import SpriteEditor
+    from .sprite_editor import SpriteEditor
