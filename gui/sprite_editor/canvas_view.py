@@ -1,9 +1,8 @@
 from __future__ import annotations
 
 from typing import Optional
-import logging
-from tkinter import messagebox
 
+import numpy as np
 import customtkinter as ctk
 from PIL import Image, ImageTk
 from PIL.Image import Resampling
@@ -20,7 +19,7 @@ class CanvasView:
         self._canvas_img: Optional[ImageTk.PhotoImage] = None
         self.preview_label: Optional[ctk.CTkLabel] = None
         self._preview_photo: Optional[ctk.CTkImage] = None
-        self._preview_warned = False
+        self.max_size = 256
 
     def build(self, parent: ctk.CTkFrame) -> None:
         """ Create the canvas area with scrollbars and mouse bindings. """
@@ -97,25 +96,7 @@ class CanvasView:
         self.canvas.configure(width=width_px, height=height_px)
         self.canvas.delete('grid')
 
-        base = Image.new('RGBA', (doc.width, doc.height), (0, 0, 0, 0))
-        pixels = base.load()
-
-        if self.editor.onion_skin.get() and self.editor.active_frame > 0:
-            prev = doc.frames[self.editor.active_frame - 1].pixels
-            for y, row in enumerate(prev):
-                for x, idx in enumerate(row):
-                    if idx < 0:
-                        continue
-                    r, g, b, a = doc.palette[idx]
-                    pixels[x, y] = (r, g, b, 90)
-
-        current = doc.frames[self.editor.active_frame].pixels
-        for y, row in enumerate(current):
-            for x, idx in enumerate(row):
-                if idx < 0:
-                    continue
-                r, g, b, a = doc.palette[idx]
-                pixels[x, y] = (r, g, b, a)
+        base = self._compose_frame_with_onion_skin(doc)
 
         if self.cell_px != 1:
             base = base.resize(
@@ -154,36 +135,21 @@ class CanvasView:
 
         The preview is then displayed in the right-hand 'Preview' label.
         """
-        max_size = 256
 
         if not self.preview_label:
             return
-
-        # Prevent duplicate warnings in same update cycle
-        if getattr(self, '_preview_warned', False):
-            return
-        self._preview_warned = True
-        # noinspection PyTypeChecker
-        self.editor.after(
-            ms=2000, func=lambda: setattr(self, '_preview_warned', False))
-        # TODO: Fix this time after numpy optimization!
 
         img = self.render_frame(self.editor.active_frame, scale=1)
         if img.width < 1 or img.height < 1:
             return
 
-        if img.width > 256 or img.height > 256:
-            logging.warning(
-                'Image too large for editor - scaled down for preview.')
-            messagebox.showwarning(title='Image too large',
-                                   message=f'Image too large for preview.\n\n'
-                                           f'Reducing image size to below '
-                                           f'{max_size} x {max_size} pixels.')
+        if img.width > self.max_size or img.height > self.max_size:
             img = img.resize(
-                (min(img.width, max_size), min(img.height, max_size)),
+                (min(img.width, self.max_size),
+                 min(img.height, self.max_size)),
                 Resampling.NEAREST)
 
-        scale = min(4, int(max_size / max(img.width, img.height)))
+        scale = min(4, int(self.max_size / max(img.width, img.height)))
         preview = img.resize(
             (int(img.width * scale), int(img.height * scale)),
             Resampling.NEAREST)
@@ -197,16 +163,8 @@ class CanvasView:
 
     def render_frame(self, index: int, scale: int = 1) -> Image.Image:
         doc = self.editor.doc
-        img = Image.new('RGBA', (doc.width, doc.height), (0, 0, 0, 0))
-        pixels = img.load()
-        matrix = doc.frames[index].pixels
-        for y in range(doc.height):
-            for x in range(doc.width):
-                idx = matrix[y][x]
-                if idx < 0:
-                    continue
-                r, g, b, a = doc.palette[idx]
-                pixels[x, y] = (int(r), int(g), int(b), int(a))
+
+        img = self._frame_to_image(doc.frames[index].pixels, doc.palette)
 
         if scale > 1:
             img = img.resize((doc.width * scale, doc.height * scale),
@@ -310,9 +268,69 @@ class CanvasView:
                 (cx, cy - 1),
             ])
 
+    @staticmethod
+    def _frame_to_rgba_array(matrix: list[list[int]],
+                             palette: list[list[int]]) -> np.ndarray:
+        """ Convert a frame matrix and palette into an RGBA NumPy array """
+        height = len(matrix)
+        width = len(matrix[0]) if height else 0
+        rgba = np.zeros((height, width, 4), dtype=np.uint8)
 
-# Late import for type checking
-from typing import TYPE_CHECKING
+        if height == 0 or width == 0:
+            return rgba
 
-if TYPE_CHECKING:  # pragma: no cover
-    from .editor import SpriteEditor
+        frame_array = np.asarray(matrix, dtype=np.int32).reshape(height, width)
+
+        if palette:
+            palette_array = np.asarray(palette, dtype=np.uint8)
+            mask = frame_array >= 0
+            if np.any(mask):
+                indices = frame_array[mask]
+                colors = palette_array[indices]
+                rgba[mask] = colors
+
+        return rgba
+
+    @classmethod
+    def _frame_to_image(cls, matrix: list[list[int]],
+                        palette: list[list[int]]) -> Image.Image:
+        """ Convert a frame matrix and palette into a Pillow Image using NumPy """
+        return Image.fromarray(
+            cls._frame_to_rgba_array(matrix, palette), mode='RGBA')
+
+    def _compose_frame_with_onion_skin(self, doc) -> Image.Image:
+        """ Render the active frame and optional onion skin into a Pillow Image """
+        height, width = doc.height, doc.width
+        composed = np.zeros((height, width, 4), dtype=np.uint8)
+
+        palette_array = np.asarray(
+            doc.palette, dtype=np.uint8) if doc.palette else None
+
+        if (palette_array is not None and
+                self.editor.onion_skin.get() and
+                self.editor.active_frame > 0):
+            onion_pixels = doc.frames[self.editor.active_frame - 1].pixels
+            onion_matrix = np.asarray(onion_pixels, dtype=np.int32).reshape(
+                height, width)
+            onion_mask = onion_matrix >= 0
+            if np.any(onion_mask):
+                onion_colors = palette_array[onion_matrix[onion_mask]].copy()
+                onion_colors[:, 3] = 90
+                composed[onion_mask] = onion_colors
+
+        if palette_array is not None:
+            active_pixels = doc.frames[self.editor.active_frame].pixels
+            active_matrix = np.asarray(active_pixels, dtype=np.int32).reshape(
+                height, width)
+            active_mask = active_matrix >= 0
+            if np.any(active_mask):
+                active_colors = palette_array[active_matrix[active_mask]]
+                composed[active_mask] = active_colors
+
+        return Image.fromarray(composed, mode='RGBA')
+
+    # Late import for type checking
+    from typing import TYPE_CHECKING
+
+    if TYPE_CHECKING:  # pragma: no cover
+        from .editor import SpriteEditor
