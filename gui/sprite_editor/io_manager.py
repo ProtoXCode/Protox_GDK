@@ -6,7 +6,9 @@ import re
 from pathlib import Path
 from tkinter.filedialog import askopenfilename, asksaveasfilename
 from typing import Any
+import threading
 
+import customtkinter as ctk
 from PIL import Image
 
 from .core import SpriteDoc
@@ -137,7 +139,7 @@ class SpriteIOManager:
             duration=frame_duration,
             loop=0 if self.editor.doc.loop else 1,
             disposal=2,
-            transparency=0,
+            transparency=0
         )
         logging.info(f'Exported GIF to: {path}')
 
@@ -145,34 +147,61 @@ class SpriteIOManager:
 
     def import_image(self) -> None:
         """
-        Import an external image file and quantize it to the current palette
+        Import an external image file and quantize it to the current palette (threaded)
         """
         path = askopenfilename(
             title='Import sprite image',
             filetypes=[('Image files', '*.png;*.jpg;*.jpeg;*.bmp'),
-                       ('All Files', '*.*')],
+                       ('All Files', '*.*')]
         )
         if not path:
             return
 
-        img = Image.open(path).convert('RGBA')
-        width, height = img.size
-        self.editor.resize_grid(width, height)
+        busy_label = ctk.CTkLabel(self.editor, text='Importing...',
+                                  text_color='orange')
+        busy_label.place(relx=0.5, rely=0.5, anchor='center')
+        self.editor.configure(cursor='watch')
+        self.editor.update_idletasks()
 
-        pixels = img.load()
-        matrix = [[-1 for _ in range(width)] for _ in range(height)]
+        def worker():
+            try:
+                img = Image.open(path).convert('RGBA')
+                width, height = img.size
 
-        for y in range(height):
-            for x in range(width):
-                r, g, b, a = pixels[x, y]
-                if a < 32:
-                    matrix[y][x] = -1
-                    continue
-                matrix[y][x] = self.find_closest_color((r, g, b, a))
+                pixels = img.load()
+                matrix = [[-1 for _ in range(width)] for _ in range(height)]
 
-        self.editor.doc.frames[self.editor.active_frame].pixels = matrix
-        self.editor.refresh_all()
+                for y in range(height):
+                    for x in range(width):
+                        r, g, b, a = pixels[x, y]
+                        if a < 32:
+                            matrix[y][x] = -1
+                            continue
+                        matrix[y][x] = self.find_closest_color((r, g, b, a))
 
+                # 🟢 Schedule the GUI updates back on the main thread
+                def apply_result():
+                    self.editor.resize_grid(width, height)
+                    self.editor.doc.frames[
+                        self.editor.active_frame].pixels = matrix
+                    self.editor.refresh_all()
+                    busy_label.destroy()
+                    self.editor.configure(cursor='')
+
+                # noinspection PyTypeChecker
+                self.editor.after(0, apply_result)
+
+            except Exception as e:
+                logging.exception(e)
+                # noinspection PyTypeChecker
+                self.editor.after(0, lambda: busy_label.configure(
+                    text=f'Error: {e}', text_color='red'))
+            finally:
+                # ensure cursor reset if apply_result wasn’t reached
+                # noinspection PyTypeChecker
+                self.editor.after(0, lambda: self.editor.configure(cursor=''))
+
+        threading.Thread(target=worker, daemon=True).start()
         logging.info(f'Imported image into current frame: {path}')
 
     # --- Color quantization --------------------------------------------------
