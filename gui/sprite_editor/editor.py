@@ -182,17 +182,22 @@ class SpriteEditor(ctk.CTkFrame):
         special_frame.grid(padx=6, pady=(8, 6), sticky='ew')
         special_frame.columnconfigure(0, weight=1)
 
-        for idx, (label, color, cmd) in enumerate([
-            ('Transparent', '#000000', lambda: self.select_color(-1)),
-            ('Fill', '#333333', lambda: self._enable_fill_mode())]):
-            ctk.CTkButton(
-                special_frame,
-                text=label,
-                width=80,
-                height=22,
-                fg_color=color,
-                command=cmd
-            ).grid(row=idx, column=0, pady=2)
+        self.transparent_button = ctk.CTkButton(
+            special_frame,
+            text='Transparent',
+            width=80, height=22,
+            fg_color='#000000',
+            command=lambda: self.select_color(-1))
+        self.transparent_button.grid(row=0, column=0, pady=2)
+
+        self.fill_button = ctk.CTkButton(
+            special_frame,
+            text='Fill',
+            width=80,
+            height=22,
+            fg_color='#426aad',
+            command=lambda: self._enable_fill_mode())
+        self.fill_button.grid(row=1, column=0, pady=2)
 
         # zoom slider (full-width, compact) ---
         zoom_box = ctk.CTkFrame(box, fg_color='transparent')
@@ -224,7 +229,7 @@ class SpriteEditor(ctk.CTkFrame):
             self.cols = 8
             self.btn_size = 20
 
-    def rebuild_color_buttons(self, frame, cols, btn_size) -> None:
+    def rebuild_color_buttons(self, frame, cols: int, btn_size: int) -> None:
         """ Clear and rebuild color buttons when palette changes """
         for child in frame.winfo_children():
             child.destroy()
@@ -492,10 +497,12 @@ class SpriteEditor(ctk.CTkFrame):
                 btn.configure(border_color='#222', border_width=2)
 
     def _enable_fill_mode(self) -> None:
-        """ Enable fill mode """
+        """ Enable fill mode, changes color of button to reflect state """
         self.fill_mode = not self.fill_mode  # Bool flip
-        print(f"Fill mode {'on' if self.fill_mode else 'off'}")
-        # TODO: make button selection visible
+        if self.fill_mode:
+            self.fill_button.configure(fg_color='green')
+        else:
+            self.fill_button.configure(fg_color='#426aad')
 
     def _add_frame(self) -> None:
         """ Add a new blank frame """
