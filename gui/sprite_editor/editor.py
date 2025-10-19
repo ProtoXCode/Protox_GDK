@@ -492,9 +492,9 @@ class SpriteEditor(ctk.CTkFrame):
         self.active_color_index = idx
         for i, btn in enumerate(self.palette_buttons):
             if i == idx:
-                btn.configure(border_color='#ffffff', border_width=3)
+                btn.configure(border_color='#ffffff', border_width=0)
             else:
-                btn.configure(border_color='#222', border_width=2)
+                btn.configure(border_color='#222', border_width=0)
 
     def _enable_fill_mode(self) -> None:
         """ Enable fill mode, changes color of button to reflect state """
