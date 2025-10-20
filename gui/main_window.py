@@ -7,10 +7,13 @@ from PIL import Image
 from gdk import __name__, __version__
 from gdk.protox_tools import ProtoXToolKit
 from gdk.config_loader import load_config
+from gui.project_editor import ProjectEditor
+from gui.settings import SettingsEditor
 from gui.sprite_editor import SpriteEditor
 from gui.level_editor import LevelEditor
-from gui.splash_screen import SplashScreen
+from gui.splash_screen.splash_screen import SplashScreen
 from gui.scene_editor import SceneEditor
+
 
 
 class GDKMain:
@@ -20,7 +23,7 @@ class GDKMain:
         self.config = load_config()
         self.padding = 10
         self.menu_width = 300
-        self.top_menu_height = 325
+        self.top_menu_height = 410
 
         self.app_width = self.config['app_width']
         self.app_height = self.config['app_height']
@@ -48,12 +51,15 @@ class GDKMain:
         self.top_menu.grid(row=0, column=0, sticky='nsew',
                            padx=self.padding, pady=self.padding)
         self.top_menu.grid_propagate(False)
+        self.top_menu.grid_rowconfigure(99, weight=1)
 
         self.sub_menu = ctk.CTkFrame(
             self.root, width=self.menu_width,
             height=self.app_height - self.padding * 4 - self.top_menu_height)
         self.sub_menu.grid(row=1, column=0, sticky='nsew',
                            padx=self.padding, pady=self.padding)
+        self.sub_menu.rowconfigure(0, weight=1)
+        self.sub_menu.columnconfigure(0, weight=1)
         self.sub_menu.grid_propagate(False)
 
         self.window = ctk.CTkFrame(
@@ -88,10 +94,12 @@ class GDKMain:
         btn_1_base = 'assets/images/btn_1.png'
         btn_2_base = 'assets/images/btn_2.png'
         btn_3_base = 'assets/images/btn_3.png'
+        btn_4_base = 'assets/images/btn_4.png'
+        btn_5_base = 'assets/images/btn_5.png'
 
         # Rounded + text composited
         btn_1_img_pil = ProtoXToolKit.image_text(
-            image=btn_1_base, text='Sprite Editor',
+            image=btn_1_base, text='Projects',
             bold=True, outline=btn_outline,
             outline_color=btn_text_color_outline,
             font=btn_font, fill=btn_text_color)
@@ -99,7 +107,7 @@ class GDKMain:
             btn_1_img_pil, radius=btn_radius)
 
         btn_2_img_pil = ProtoXToolKit.image_text(
-            image=btn_2_base, text='Level Editor',
+            image=btn_2_base, text='Sprite Editor',
             bold=True, outline=btn_outline,
             outline_color=btn_text_color_outline,
             font=btn_font, fill=btn_text_color)
@@ -107,12 +115,28 @@ class GDKMain:
             btn_2_img_pil, radius=btn_radius)
 
         btn_3_img_pil = ProtoXToolKit.image_text(
-            image=btn_3_base, text='Scene Editor',
+            image=btn_3_base, text='Level Editor',
             bold=True, outline=btn_outline,
             outline_color=btn_text_color_outline,
             font=btn_font, fill=btn_text_color)
         btn_3_img_pil = ProtoXToolKit.round_corners(
             btn_3_img_pil, radius=btn_radius)
+
+        btn_4_img_pil = ProtoXToolKit.image_text(
+            image=btn_4_base, text='Scene Editor',
+            bold=True, outline=btn_outline,
+            outline_color=btn_text_color_outline,
+            font=btn_font, fill=btn_text_color)
+        btn_4_img_pil = ProtoXToolKit.round_corners(
+            btn_4_img_pil, radius=btn_radius)
+
+        btn_5_img_pil = ProtoXToolKit.image_text(
+            image=btn_5_base, text='Settings / Help',
+            bold=True, outline=btn_outline,
+            outline_color=btn_text_color_outline,
+            font=btn_font, fill=btn_text_color)
+        btn_5_img_pil = ProtoXToolKit.round_corners(
+            btn_5_img_pil, radius=btn_radius)
 
         btn_1_img = ctk.CTkImage(
             light_image=btn_1_img_pil,
@@ -129,24 +153,50 @@ class GDKMain:
             dark_image=btn_3_img_pil,
             size=(200, 40))
 
-        ctk.CTkButton(self.top_menu, text='', image=btn_1_img, border_width=0,
-                      fg_color='transparent', command=self.sprite_editor).grid(
-            row=1, column=0, padx=2)
+        btn_4_img = ctk.CTkImage(
+            light_image=btn_4_img_pil,
+            dark_image=btn_4_img_pil,
+            size=(200, 40))
 
-        ctk.CTkButton(self.top_menu, text='', image=btn_2_img, border_width=0,
-                      fg_color='transparent', command=self.level_editor).grid(
-            row=2, column=0, pady=2)
+        btn_5_img = ctk.CTkImage(
+            light_image=btn_5_img_pil,
+            dark_image=btn_5_img_pil,
+            size=(200, 40))
 
-        ctk.CTkButton(self.top_menu, text='', image=btn_3_img, border_width=0,
-                      fg_color='transparent', command=self.scene_editor).grid(
-            row=3, column=0, pady=2)
+        ctk.CTkButton(self.top_menu, text='', image=btn_1_img,
+                      border_width=0, fg_color='transparent',
+                      command=self.project_editor).grid(
+            row=1, column=0, padx=1)
+
+        ctk.CTkButton(self.top_menu, text='', image=btn_2_img,
+                      border_width=0, fg_color='transparent',
+                      command=self.sprite_editor).grid(
+            row=2, column=0, padx=1)
+
+        ctk.CTkButton(self.top_menu, text='', image=btn_3_img,
+                      border_width=0, fg_color='transparent',
+                      command=self.level_editor).grid(
+            row=3, column=0, pady=1)
+
+        ctk.CTkButton(self.top_menu, text='', image=btn_4_img,
+                      border_width=0, fg_color='transparent',
+                      command=self.scene_editor).grid(
+            row=4, column=0, pady=1)
+
+        ctk.CTkButton(self.top_menu, text='', image=btn_5_img,
+                      border_width=0, fg_color='transparent',
+                      command=self.settings_editor).grid(
+            row=5, column=0, padx=1)
 
         # --- Views -----------------------------------------------------------
         self.views = {
+            # 'project': ProjectEditor(self.window, main_app=self)
+            'project': ProjectEditor(self.window, main_app=self),
             'sprite': SpriteEditor(self.window, main_app=self),
             'level': LevelEditor(self.window, main_app=self),
             'splash': SplashScreen(self.window, main_app=self),
-            'scene': SceneEditor(self.window, main_app=self)
+            'scene': SceneEditor(self.window, main_app=self),
+            'settings': SettingsEditor(self.window, main_app=self)
         }
 
         for v in self.views.values():
@@ -163,7 +213,13 @@ class GDKMain:
         view.tkraise()
 
     def splash_screen(self) -> None:
+        """ Displays the splash screen on start up with news in sub menu. """
         self.show_view('splash')
+        splash = self.views['splash']
+        if hasattr(splash, 'build_submenu'):
+            self.set_submenu(splash.build_submenu)
+        else:
+            self.clear_sub_menu()
         self.fade_in()
 
     def fade_in(self, alpha: float = 0.0, ms: int = 20) -> None:
@@ -183,6 +239,14 @@ class GDKMain:
         """ Destroy all widgets in the sub_menu """
         for widget in self.sub_menu.winfo_children():
             widget.destroy()
+
+    def project_editor(self) -> None:
+        self.show_view('project')
+        project = self.views['project']
+        if hasattr(project, 'build_submenu'):
+            self.set_submenu(project.build_submenu)
+        else:
+            self.clear_sub_menu()
 
     def sprite_editor(self) -> None:
         self.show_view('sprite')
@@ -205,5 +269,13 @@ class GDKMain:
         scene = self.views['scene']
         if hasattr(scene, 'build_submenu'):
             self.set_submenu(scene.build_submenu)
+        else:
+            self.clear_sub_menu()
+
+    def settings_editor(self) -> None:
+        self.show_view('settings')
+        settings = self.views['settings']
+        if hasattr(settings, 'build_submenu'):
+            self.set_submenu(settings.build_submenu)
         else:
             self.clear_sub_menu()

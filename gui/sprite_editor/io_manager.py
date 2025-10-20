@@ -157,7 +157,7 @@ class SpriteIOManager:
         if not path:
             return
 
-        busy_label = ctk.CTkLabel(self.editor, text='Importing...',
+        busy_label = ctk.CTkLabel(self.editor, text='  Importing...  ',
                                   text_color='orange')
         busy_label.place(relx=0.5, rely=0.5, anchor='center')
         self.editor.configure(cursor='watch')

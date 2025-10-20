@@ -8,7 +8,7 @@ import customtkinter as ctk
 
 
 class MetadataPanel:
-    """Manages the sprite metadata sidebar and synchronisation."""
+    """ Manages the sprite metadata sidebar and synchronisation. """
 
     def __init__(self, editor: 'SpriteEditor') -> None:
         self.editor = editor
@@ -28,12 +28,9 @@ class MetadataPanel:
         meta = ctk.CTkFrame(parent)
         meta.grid(row=0, column=0, sticky='nsew', padx=8, pady=8)
 
-        parent.rowconfigure(1, weight=1)
-        parent.columnconfigure(0, weight=1)
-
-        meta.rowconfigure(0, weight=1)
+        meta.rowconfigure(1, weight=0)
         meta.columnconfigure(1, weight=1)
-        meta.rowconfigure('all', weight=0)
+        meta.grid_rowconfigure(99, weight=1)
 
         ctk.CTkLabel(
             meta,
@@ -43,38 +40,38 @@ class MetadataPanel:
 
         doc = self.editor.doc
 
-        ctk.CTkLabel(meta, text='Name:').grid(
-            row=1, column=0, sticky='w', pady=2)
+        ctk.CTkLabel(meta, text='Name: ').grid(
+            row=1, column=0, sticky='e', pady=2)
         self.meta_name = ctk.CTkEntry(meta)
         self.meta_name.insert(0, doc.name)
         self.meta_name.grid(row=1, column=1, sticky='ew', pady=2)
 
-        ctk.CTkLabel(meta, text='Author:').grid(
-            row=2, column=0, sticky='w', pady=2)
+        ctk.CTkLabel(meta, text='Author: ').grid(
+            row=2, column=0, sticky='e', pady=2)
         self.meta_author = ctk.CTkEntry(meta)
         self.meta_author.insert(0, doc.author)
         self.meta_author.grid(row=2, column=1, sticky='ew', pady=2)
 
-        ctk.CTkLabel(meta, text='Animation FPS:').grid(
-            row=3, column=0, sticky='w', pady=2)
+        ctk.CTkLabel(meta, text='Animation FPS: ').grid(
+            row=3, column=0, sticky='e', pady=2)
         self.meta_fps = ctk.CTkEntry(meta, width=80, justify='center')
         self.meta_fps.insert(0, doc.fps)
         self.meta_fps.grid(row=3, column=1, sticky='ew', pady=2)
 
-        ctk.CTkLabel(meta, text='Loop:').grid(
-            row=4, column=0, sticky='w', pady=2)
+        ctk.CTkLabel(meta, text='Loop: ').grid(
+            row=4, column=0, sticky='e', pady=2)
         self.meta_loop = ctk.BooleanVar(value=doc.loop)
         ctk.CTkCheckBox(meta, text='', variable=self.meta_loop).grid(
             row=4, column=1, sticky='w', pady=2)
 
-        ctk.CTkLabel(meta, text='Tags:').grid(
-            row=5, column=0, sticky='w', pady=2)
+        ctk.CTkLabel(meta, text='Tags: ').grid(
+            row=5, column=0, sticky='e', pady=2)
         self.meta_tags = ctk.CTkEntry(meta)
         self.meta_tags.insert(0, ', '.join(doc.tags or []))
         self.meta_tags.grid(row=5, column=1, sticky='ew', pady=2)
 
-        ctk.CTkLabel(meta, text='Properties:').grid(
-            row=6, column=0, sticky='nw', pady=(6, 2))
+        ctk.CTkLabel(meta, text='Properties: ').grid(
+            row=6, column=0, sticky='ne', pady=(6, 2))
         flags_box = ctk.CTkFrame(meta, fg_color='transparent')
         flags_box.grid(row=6, column=1, sticky='w', pady=(6, 2))
 
