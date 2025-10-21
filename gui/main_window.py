@@ -190,7 +190,6 @@ class GDKMain:
 
         # --- Views -----------------------------------------------------------
         self.views = {
-            # 'project': ProjectEditor(self.window, main_app=self)
             'project': ProjectEditor(self.window, main_app=self),
             'sprite': SpriteEditor(self.window, main_app=self),
             'level': LevelEditor(self.window, main_app=self),
