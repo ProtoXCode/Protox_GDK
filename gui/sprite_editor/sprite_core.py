@@ -64,10 +64,10 @@ class SpriteDoc:
             'loop': self.loop,
             'author': self.author,
             'tags': self.tags or [],
+            'properties': self.properties or {},
             'palette_name': self.palette_name,
             'palette': self.palette,
-            'frames': [f.pixels for f in self.frames],
-            'properties': self.properties or {},
+            'frames': [f.pixels for f in self.frames]
         }
 
     @staticmethod

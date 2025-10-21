@@ -1,4 +1,4 @@
-# 🧩 ProtoX Game Developer Kit (GDK)
+# 🧩 ProtoX Game Developer Kit (GDK) -> Alpha <-
 
 > **“Pixel-perfect control meets intent-driven design.”**\
 > A modular retro-style game creation kit built in **Python**, featuring
@@ -7,18 +7,33 @@
 
 ---
 
+## Disclaimer
+
+> This project started as a *easy project to re-create some old Amiga game* to
+> avoid burning out on the other projects as they are kinda difficult at times,
+> especially as I work full time in a factory doing factory stuff as I'm not a
+> professional programmer, or work with software development.\
+> **Currently** 🍺 Here's to hoping .
+> 
+> Therefore this disclaimer, things here **will** change and I make stuff up as
+> I go along, but I got a clear goal in mind, and I try to keep it tidy.
+
+---
+
 ## 🚀 Overview
+> 🚧 Heavy construction ahead, W.I.P. 🚧
 
 **ProtoX GDK** is an experimental toolkit for designing 2D games the smart way
 — with clean data, modular structure, and zero bloat.
 
 Each editor is its own creative module:
 
-| Editor               | Purpose                                                                        | Output                         |
-|----------------------| ------------------------------------------------------------------------------ | ------------------------------ |
-| 🎨 **Sprite Editor** | Draw and animate sprites using a palette-based grid.                           | `.sprite.json`, `.png`, `.gif` |
-| 🧱 **Level Editor**  | Arrange tiles and props into maps or stages.                                   | `.level.json`                  |
-| 🎮 **Scene Editor**  | Combine levels and sprites into storyboards, cutscenes, or gameplay sequences. | `.scene.json`                  |
+| Editor                   | Purpose                                                                                                                                 | Output                         |
+|--------------------------|-----------------------------------------------------------------------------------------------------------------------------------------|--------------------------------|
+| 💾 **Projects Editor**   | Set up projects in an environment settings, base game settings and export game package and runnable framework with binary file formats. | `.gdkimg`, `.gdklvl`           |
+| 🎨 **Sprite Editor**     | Draw and animate sprites using a palette-based grid.                                                                                    | `.sprite.json`, `.png`, `.gif` |
+| 🧱 **Level Editor**      | Arrange tiles and props into maps or stages.                                                                                            | `.level.json`                  |
+| 🎮 **Scene Editor**      | Combine levels and sprites into storyboards, cutscenes, or gameplay sequences.                                                          | `.scene.json`                  |
 
 All editors share a **common data philosophy** — small JSON files storing visual
 intent, animation data, and metadata.\
@@ -42,13 +57,17 @@ Minimal, editable, and reusable across editors.
   "loop": true,
   "author": "ProtoX",
   "tags": ["player", "idle"],
+  "properties": {
+    "collision": true,
+    "static": false,
+    "background": false,
+    "player": true
+  },
+  "palette_name": "ProtoX 64",
   "palette": [
-    [0, 0, 0, 0],
-    [255, 255, 255, 255],
-    [255, 0, 0, 255]
-  ],
+    [ 0, 0, 0, 0 ], ...],
   "frames": [
-    [[0,1,1,0],[1,2,2,1],[0,1,1,0]]
+    [[0,1,1,0],[1,2,2,1],[0,1,1,0], ...]
   ]
 }
 ```
@@ -138,16 +157,16 @@ For storyboards, sequences, or game logic.
 
 ## 🔮 Roadmap
 
-| Feature                                   | Status       |
-|-------------------------------------------| ------------ |
-| Sprite animation → GIF export             | ✅ Done      |
-| Level editor drag-drop interface          | 🚧 Planned   |
-| Scene editor with keyframe timeline       | 🚧 Planned   |
-| Asset browser / palette folders           | 🧩 Concept   |
-| Pygame runtime loader for `.sprite.json`  | 🧠 Research  |
-| Music events, make music control gameplay | 🧠 Research  |
-| Binary `.gdkimg` format (compressed)      | 🧪 Prototype |
-| Multi-tool workspace saving               | 🔜 Future    |
+| Feature                                       | Status       |
+|-----------------------------------------------| ------------ |
+| Sprite animation → GIF export                 | ✅ Done      |
+| Level editor drag-drop interface              | 🚧 Planned   |
+| Scene editor with keyframe timeline           | 🚧 Planned   |
+| Asset browser / palette folders               | 🧩 Concept   |
+| Pygame runtime loader for `.sprite.json`      | 🧠 Research  |
+| Music events, make music control gameplay     | 🧠 Research  |
+| Binary `.gdkimg, .gdklvl` format (compressed) | 🧪 Prototype |
+| Multi-tool workspace saving                   | 🔜 Future    |
 
 
 ---
@@ -169,11 +188,31 @@ That makes it ideal for:
 
 ```
 ProtoX_GDK/
+├─ main.py
 ├─ gdk/
 │  ├─ palette.py
 │  ├─ protox_tools.py
 │  └─ config_loader.py
 ├─ gui/
+│  ├─ level_editor/
+│  │  ├─ __init__.py
+│  │  ├─ level_core.py 
+│  │  └─ level_editor.py
+│  ├─ project_editor/ 
+│  │  ├─ __init__.py
+│  │  ├─ project_core.py
+│  │  └─ project_editor.py
+│  ├─ scene_editor/ 
+│  │  ├─ __init__.py 
+│  │  ├─ scene_core.py    
+│  │  └─ scene_editor.py  
+│  ├─ settings/ 
+│  │  ├─ __init__.py
+│  │  ├─ about.py
+│  │  ├─ help.py
+│  │  ├─ options.py
+│  │  ├─ settings_editor.py   
+│  │  └─ sub_menu.py       
 │  ├─ sprite_editor/ 
 │  │  ├─ __init__.py
 │  │  ├─ canvas_view.py
@@ -197,9 +236,8 @@ ProtoX_GDK/
 
 ## 🧠 Credits & License
 
-Created with ❤️ by **ProtoX**\
 License: **MIT** (free to use, modify, and build upon)
 
 ---
 
-> *“The old Amiga spirit never died — it just learned Python.”*
+> *“All I wanted to do was to remake an old Amiga game with PyGame...”*

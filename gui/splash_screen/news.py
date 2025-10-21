@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import customtkinter as ctk
 
 
@@ -7,6 +9,7 @@ class NewsPanel:
     def __init__(self):
         self.frame = None
         self.news_box = None
+        self.news_path = Path('assets/data/news.md')
 
     def build(self, parent) -> ctk.CTkFrame:
         news = ctk.CTkFrame(parent)
@@ -24,8 +27,19 @@ class NewsPanel:
 
         # Content
         self.news_box = ctk.CTkTextbox(news, wrap='word')
-        self.news_box.insert('end', 'Welcome to ProtoX GDK!\n')
-        self.news_box.configure(state='disabled')
         self.news_box.grid(row=1, column=0, sticky='nsew', padx=2, pady=2)
+        self.load_news()
 
         return news
+
+    def load_news(self) -> None:
+        """ Loads and display Markdown file content. """
+        if not self.news_path.exists():
+            text = 'No news file found.'
+        else:
+            text = self.news_path.read_text('utf-8')
+
+        self.news_box.configure(state='normal')
+        self.news_box.delete('1.0', 'end')
+        self.news_box.insert('end', text)
+        self.news_box.configure(state='disabled')

@@ -15,7 +15,6 @@ from gui.splash_screen.splash_screen import SplashScreen
 from gui.scene_editor import SceneEditor
 
 
-
 class GDKMain:
     def __init__(self, root) -> None:
         """ GDK """
@@ -24,6 +23,7 @@ class GDKMain:
         self.padding = 10
         self.menu_width = 300
         self.top_menu_height = 410
+        self.started = False
 
         self.app_width = self.config['app_width']
         self.app_height = self.config['app_height']
@@ -79,10 +79,16 @@ class GDKMain:
             light_image=rounded_image,
             dark_image=rounded_image,
             size=(280, 140))
-        self.label_logo = ctk.CTkLabel(
-            self.top_menu, image=self.logo_image, text='')
-        self.label_logo.grid(
-            row=0, column=0, pady=self.padding, padx=self.padding)
+
+        self.logo_button = ctk.CTkButton(
+            self.top_menu,
+            text='',
+            image=self.logo_image,
+            border_width=0,
+            fg_color='transparent',
+            hover=False,
+            command=self.splash_screen
+        ).grid(row=0, column=0, pady=self.padding, padx=self.padding)
 
         # --- Buttons ---
         btn_font = ('arial.ttf', 20)
@@ -219,7 +225,9 @@ class GDKMain:
             self.set_submenu(splash.build_submenu)
         else:
             self.clear_sub_menu()
-        self.fade_in()
+        if not self.started:
+            self.fade_in()
+            self.started = True
 
     def fade_in(self, alpha: float = 0.0, ms: int = 20) -> None:
         """ Fades in the app on startup """
