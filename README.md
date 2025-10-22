@@ -28,17 +28,19 @@
 
 Each editor is its own creative module:
 
-| Editor                   | Purpose                                                                                                                                 | Output                         |
-|--------------------------|-----------------------------------------------------------------------------------------------------------------------------------------|--------------------------------|
-| 💾 **Projects Editor**   | Set up projects in an environment settings, base game settings and export game package and runnable framework with binary file formats. | `.gdkimg`, `.gdklvl`           |
-| 🎨 **Sprite Editor**     | Draw and animate sprites using a palette-based grid.                                                                                    | `.sprite.json`, `.png`, `.gif` |
-| 🧱 **Level Editor**      | Arrange tiles and props into maps or stages.                                                                                            | `.level.json`                  |
-| 🎮 **Scene Editor**      | Combine levels and sprites into storyboards, cutscenes, or gameplay sequences.                                                          | `.scene.json`                  |
+| Editor                                                                | Purpose                                                                                                                                 | Output                         |
+|-----------------------------------------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------|--------------------------------|
+| 💾 **Projects Editor**                                                | Set up projects in an environment settings, base game settings and export game package and runnable framework with binary file formats. | `.gdkimg`, `.gdklvl`           |
+| 🎨 **[Sprite Editor](https://www.youtube.com/watch?v=JNLkewfcquA)**   | Draw and animate sprites using a palette-based grid.                                                                                    | `.sprite.json`, `.png`, `.gif` |
+| 🧱 **Level Editor**                                                   | Arrange tiles and props into maps or stages.                                                                                            | `.level.json`                  |
+| 🎮 **Scene Editor**                                                   | Combine levels and sprites into storyboards, cutscenes, or gameplay sequences.                                                          | `.scene.json`                  |
 
 All editors share a **common data philosophy** — small JSON files storing visual
 intent, animation data, and metadata.\
 This design makes them perfect for future integration with engines like **pygame**
 or my own **ProtoX runtime**.
+
+![Sprite Editor](assets/images/repo/gui_sprite.png "Sprite Editor")
 
 ---
 
@@ -235,9 +237,11 @@ ProtoX_GDK/
 ---
 
 ## 🧠 Credits & License
-
-License: **MIT** (free to use, modify, and build upon)
+Created by Tom E Harnes
+License: [**MIT**](LICENSE) (free to use, modify, and build upon)
 
 ---
+
+![Animated](assets/images/repo/amimated.gif "Animated GIF")
 
 > *“All I wanted to do was to remake an old Amiga game with PyGame...”*
