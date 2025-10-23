@@ -10,6 +10,7 @@ from PIL import Image
 from customtkinter import CTkFrame
 
 from gdk.palette import PALETTES
+from gdk.utils import rgba_hex
 from .canvas_view import CanvasView
 from .sprite_core import SpriteFrame, SpriteDoc
 from .io_manager import SpriteIOManager
@@ -242,7 +243,7 @@ class SpriteEditor(ctk.CTkFrame):
                 text='',
                 width=btn_size,
                 height=btn_size,
-                fg_color=_rgba_hex(rgba),
+                fg_color=rgba_hex(rgba),
                 corner_radius=4,
                 border_width=0,
                 border_color='#222',
@@ -578,12 +579,3 @@ class SpriteEditor(ctk.CTkFrame):
     def _find_closest_color(self, rgba: tuple[Any, ...]) -> int:
         """ Find the closest color to rgba """
         return self.io_manager.find_closest_color(rgba)
-
-
-# --- Helpers -----------------------------------------------------------------
-
-
-def _rgba_hex(rgba: list[int]) -> str:
-    """ CTk buttons accept #RRGGBB; we ignore alpha for the button swatch """
-    r, g, b, a = rgba
-    return f'#{r:02x}{g:02x}{b:02x}'
