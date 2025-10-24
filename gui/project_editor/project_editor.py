@@ -5,6 +5,7 @@ import customtkinter as ctk
 from .selection import SelectionPanel
 from .view_game import GameView
 from .view_keybindings import KeybindingsView
+from .project_manager import ProjectLoader
 
 
 class ProjectEditor(ctk.CTkFrame):
@@ -56,6 +57,10 @@ class ProjectEditor(ctk.CTkFrame):
             raise ValueError(f'Unknown view: {name}')
         view.tkraise()
 
-    def build_submenu(self, parent) -> ctk.CTkFrame:
+    def project_menu(self, parent) -> ctk.CTkFrame:
         """Build the left submenu inside the main app."""
         return self.submenu.build(parent)
+
+    def build_submenu(self, parent) -> ctk.CTkFrame:
+        submenu = ProjectLoader(self)
+        return submenu.build(parent)

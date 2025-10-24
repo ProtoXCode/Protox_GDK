@@ -4,12 +4,12 @@ import customtkinter as ctk
 class OptionsPanel:
     """ The submenu displayed in the left panel when using Settings view. """
 
-    def __init__(self, controller):
+    def __init__(self, controller) -> None:
         self.controller = controller  # reference to SettingsEditor
 
     def build(self, parent) -> ctk.CTkFrame:
         sub_menu = ctk.CTkFrame(parent)
-        sub_menu.grid(row=0, column=0, sticky='nsew', pady=8, padx=8)
+        sub_menu.grid(row=0, column=0, sticky='nsew', padx=8, pady=8)
         sub_menu.grid_rowconfigure(0, weight=0)
         sub_menu.grid_columnconfigure(0, weight=1)
 

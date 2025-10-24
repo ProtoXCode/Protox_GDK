@@ -88,7 +88,7 @@ class GDKMain:
             fg_color='transparent',
             hover=False,
             command=self.splash_screen
-        ).grid(row=0, column=0, pady=self.padding, padx=self.padding)
+        ).grid(row=0, column=0, pady=self.padding)
 
         # --- Buttons ---
         btn_font = ('arial.ttf', 20)
