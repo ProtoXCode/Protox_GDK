@@ -1,10 +1,12 @@
 import logging
-import os
+import json
 import re
 from pathlib import Path
 from tkinter import messagebox
 
 import customtkinter as ctk
+
+from .project_core import ProjectDoc
 
 
 class ProjectLoader:
@@ -32,30 +34,42 @@ class ProjectLoader:
         return sub_menu
 
     def create_project(self) -> None:
+        """ Create a new project folder and base JSON file. """
         name = self._get_project_name()
         if len(name) == 0:
             return
 
-        print(f'Project name: {name}')
-
         project_root = Path(__file__).parent.parent.parent / 'projects'
         root = name.replace(' ', '_').lower()
-        print(project_root)
+        project_dir = project_root / root
 
+        #  --- Create project folder structure --------------------------------
         try:
-            # Create project dir and subfolders:
-            os.mkdir(os.path.join(project_root, root))
-            os.mkdir(os.path.join(project_root, root, 'sprites'))
-            os.mkdir(os.path.join(project_root, root, 'levels'))
-        except OSError:
+            project_dir.mkdir(parents=True, exist_ok=True)
+            (project_dir / 'sprites').mkdir()
+            (project_dir / 'levels').mkdir()
+        except FileExistsError:
             messagebox.showerror(
                 title='Error',
-                message='Project already exists.'
-            )
-            logging.error('Project directory already exists')
+                message=f'Project {name} already exists.')
+            logging.error(f'Project directory "{root}" already exists')
+
+        # --- Create and save the project.json file ---------------------------
+        project_doc = ProjectDoc.new(name)
+        project_file = project_dir / 'project.json'
+
+        with open(project_file, 'w', encoding='utf-8') as f:
+            json.dump(project_doc.to_json(), f, indent=4)
+
+        logging.info(f'Created new project: {project_file}')
+        messagebox.showinfo(
+            title='Project Created',
+            message=f'Project {name} created successfully.'
+        )
 
     @staticmethod
-    def _get_project_name() -> str | None:
+    def _get_project_name() -> str:
+        """ Asks user for a project name using standard characters. """
         while True:
             project = ctk.CTkInputDialog(
                 text='Select a project name',
