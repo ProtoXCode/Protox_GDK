@@ -25,8 +25,13 @@ class GDKMain:
         self.top_menu_height = 410
         self.started = False
 
-        self.app_width = self.config['app_width']
-        self.app_height = self.config['app_height']
+        self.root.attributes('-fullscreen', self.config['fullscreen'])
+
+        min_width = 1575  # Minimum size for the GUI
+        min_height = 825
+
+        self.app_width = max(self.config['app_width'], min_width)
+        self.app_height = max(self.config['app_height'], min_height)
 
         if platform.system() == 'Windows':
             self.root.iconbitmap('assets/icons/icon.ico')
@@ -226,7 +231,8 @@ class GDKMain:
         else:
             self.clear_sub_menu()
         if not self.started:
-            self.fade_in()
+            if self.config['fade_in']:
+                self.fade_in()
             self.started = True
 
     def fade_in(self, alpha: float = 0.0, ms: int = 20) -> None:

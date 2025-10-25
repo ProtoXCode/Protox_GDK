@@ -39,6 +39,7 @@ class GameView(ctk.CTkFrame):
             title_frame,
             text='Rename',
             width=30,
+            state='disabled',
             command=self.rename
         ).grid(row=0, column=1, sticky='w', padx=(10, 0))
 
@@ -67,27 +68,35 @@ class GameView(ctk.CTkFrame):
 
         # Author
         self.author = ctk.CTkEntry(
-            self.properties_frame, font=font, placeholder_text='Unknown')
+            self.properties_frame,
+            font=font,
+            placeholder_text='Unknown',
+            state='disabled')
         add_row('Author', 0, self.author)
 
         # Resolution
         self.resolution = ctk.CTkEntry(
-            self.properties_frame, font=font, placeholder_text='800 x 600')
+            self.properties_frame,
+            font=font,
+            placeholder_text='800 x 600',
+            state='disabled')
         add_row('Resolution', 1, self.resolution)
 
         # Fullscreen
         self.fullscreen = ctk.CTkCheckBox(
-            self.properties_frame, text='')
+            self.properties_frame, text='', state='disabled')
         add_row('Fullscreen', 2, self.fullscreen)
 
         # Game Type
         self.game_type = ctk.CTkOptionMenu(
-            self.properties_frame, values=['Platformer', 'RPG'])
+            self.properties_frame,
+            values=['Platformer', 'RPG'],
+            state='disabled')
         add_row('Game Type', 3, self.game_type)
 
         # Gravity
         self.gravity = ctk.CTkCheckBox(
-            self.properties_frame, text='')
+            self.properties_frame, text='', state='disabled')
         add_row('Gravity', 4, self.gravity)
 
         # --- Save Button ---
@@ -97,6 +106,7 @@ class GameView(ctk.CTkFrame):
             height=40,
             width=100,
             fg_color='darkgreen',
+            state='disabled',
             command=self.save)
         self.grid_rowconfigure(2, weight=0)
         self.save_button.grid(
@@ -109,6 +119,7 @@ class GameView(ctk.CTkFrame):
             height=40,
             width=100,
             fg_color='darkred',
+            state='disabled',
             command=self.delete)
         self.delete_button.grid(
             row=2, column=1, sticky='se', padx=(10, 60), pady=(10, 40))

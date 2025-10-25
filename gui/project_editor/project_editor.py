@@ -33,8 +33,7 @@ class ProjectEditor(ctk.CTkFrame):
 
         # --- Content frame ---
         self.content_frame = ctk.CTkFrame(self)
-        self.content_frame.grid(
-            row=1, column=1, sticky='nsew', padx=8, pady=8)
+        self.content_frame.grid(row=1, column=1, sticky='nsew', padx=8, pady=8)
         self.content_frame.grid_rowconfigure(0, weight=1)
         self.content_frame.grid_columnconfigure(0, weight=1)
 

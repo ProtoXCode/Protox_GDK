@@ -1,3 +1,5 @@
+import sys
+
 import customtkinter as ctk
 
 
@@ -40,5 +42,14 @@ class OptionsPanel:
         ).grid(row=3, column=0, sticky='ew', pady=8, padx=40)
 
         sub_menu.grid_rowconfigure(99, weight=1)
+
+        ctk.CTkButton(
+            sub_menu,
+            text='Exit',
+            font=btn_font,
+            height=40,
+            fg_color='darkgreen',
+            command=lambda: sys.exit(0)
+        ).grid(row=100, column=0, sticky='ew', pady=(8, 20), padx=40)
 
         return sub_menu
