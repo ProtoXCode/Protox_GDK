@@ -33,7 +33,10 @@ class ProjectEditor(ctk.CTkFrame):
 
         # --- Content frame ---
         self.content_frame = ctk.CTkFrame(self)
-        self.content_frame.grid(row=1, column=1, sticky='nsew', padx=8, pady=8)
+        self.content_frame.grid(
+            row=1, column=1, sticky='nsew', padx=8, pady=8)
+        self.content_frame.grid_rowconfigure(0, weight=1)
+        self.content_frame.grid_columnconfigure(0, weight=1)
 
         # --- Subviews ---
         self.views = {
@@ -42,7 +45,7 @@ class ProjectEditor(ctk.CTkFrame):
         }
 
         for v in self.views.values():
-            v.grid(row=0, column=0, sticky='nsew')
+            v.grid(row=0, column=0, sticky='nsew', padx=8, pady=8)
 
         # Connect submenu button actions
         self.submenu.set_controller(self)

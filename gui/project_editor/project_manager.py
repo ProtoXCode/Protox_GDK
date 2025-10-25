@@ -77,7 +77,7 @@ class ProjectLoader:
             title='Project Created',
             message=f'Project {name} created successfully.'
         )
-        
+
         self.scan_projects()
 
     @staticmethod
