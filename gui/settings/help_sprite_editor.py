@@ -1,8 +1,8 @@
 import customtkinter as ctk
 
 
-class KeybindingsView(ctk.CTkFrame):
+class SpriteEditorView(ctk.CTkFrame):
     def __init__(self, parent) -> None:
         super().__init__(parent)
-        ctk.CTkLabel(self, text='Keybindings').pack(padx=20, pady=20)
+        ctk.CTkLabel(self, text='Sprite Editor').pack(padx=20, pady=20)
         self.configure(fg_color='transparent')

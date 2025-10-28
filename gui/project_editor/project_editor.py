@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import customtkinter as ctk
 
-from .selection import SelectionPanel
+from .project_selection import SelectionPanel
 from .view_game import GameView
 from .view_keybindings import KeybindingsView
 from .project_manager import ProjectLoader
