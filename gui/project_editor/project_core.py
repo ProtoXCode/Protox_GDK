@@ -14,7 +14,7 @@ class ProjectDoc:
             project_name=name,
             author=author,
             properties={
-                'game_type': 'platformer',
+                'game_type': 'Platformer',
                 'gravity': True,
                 'resolution': (800, 600),
                 'fullscreen': False

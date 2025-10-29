@@ -16,7 +16,13 @@ def load_config() -> dict:
         config = {'app_width': 1575,
                   'app_height': 825,
                   'fullscreen': False,
-                  'fade_in': True}
+                  'fade_in': True,
+                  'game_types': [
+                      'Platformer',
+                      'RPG',
+                      'Fighter',
+                      'Shooter'
+                  ]}
         with open(config_file, encoding='utf-8', mode='w') as json_data:
             json.dump(config, json_data, indent=4)
         logging.info('Default config file created')

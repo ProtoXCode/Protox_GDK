@@ -7,6 +7,7 @@ from tkinter import messagebox
 import customtkinter as ctk
 
 from .project_core import ProjectDoc
+from .view_game import GameView
 
 
 class ProjectLoader:
@@ -139,9 +140,8 @@ class ProjectLoader:
             self.projects_buttons.append(btn)
             row += 1
 
-    @staticmethod
-    def load_project(project_path: Path) -> None:
-        """ Called when clicking a project button. """
+    def load_project(self, project_path: Path) -> None:
+        """ Called when clicking a project button, loads and enables buttons. """
         project_file = project_path / 'project.json'
         if not project_file.exists():
             messagebox.showerror(
@@ -150,13 +150,26 @@ class ProjectLoader:
             )
             return
 
+        game_view: GameView = self.controller.views['game']
+
+        # Enable controls
+        for widget in (
+                game_view.save_button,
+                game_view.delete_button,
+                game_view.rename_button,
+                game_view.author,
+                game_view.resolution,
+                game_view.fullscreen,
+                game_view.game_type,
+                game_view.gravity
+        ):
+            widget.configure(state='normal')
+
         with open(project_file, 'r', encoding='utf-8') as f:
             data = json.load(f)
 
-        project_name = data.get('project_name', project_path.name)
-        messagebox.showinfo(
-            title='Project Loaded',
-            message=f'Loaded project: {project_name}'
-        )
+        # Populate data
+        game_view.load(data)
 
+        project_name = data.get('project_name', project_path.name)
         logging.info(f'Loaded project: {project_name}')

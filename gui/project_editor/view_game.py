@@ -6,9 +6,14 @@ import customtkinter as ctk
 class GameView(ctk.CTkFrame):
     """ Displays the currently loaded projects metadata and editable properties. """
 
-    def __init__(self, parent) -> None:
+    def __init__(self, parent, main_app=None) -> None:
         super().__init__(parent)
         self.project_path: Path | None = None
+        self.main_app = main_app
+        self.config = main_app.config if main_app else {}
+
+        # Pull game types from config, with fallback
+        self.game_types = self.config.get('game_types', ['Platformer', 'RPG'])
 
         # --- Main layout ---
         self.configure(fg_color='transparent')
@@ -33,15 +38,6 @@ class GameView(ctk.CTkFrame):
         self.project_title.grid(row=0, column=0, sticky='w')
 
         ctk.CTkLabel(title_frame, text='').grid(row=0, column=2, sticky='ew')
-
-        # Rename button
-        ctk.CTkButton(
-            title_frame,
-            text='Rename',
-            width=30,
-            state='disabled',
-            command=self.rename
-        ).grid(row=0, column=1, sticky='w', padx=(10, 0))
 
         # --- Properties frame ---
         self.properties_frame = ctk.CTkFrame(self, fg_color='transparent')
@@ -90,7 +86,7 @@ class GameView(ctk.CTkFrame):
         # Game Type
         self.game_type = ctk.CTkOptionMenu(
             self.properties_frame,
-            values=['Platformer', 'RPG'],
+            values=self.game_types,
             state='disabled')
         add_row('Game Type', 3, self.game_type)
 
@@ -124,11 +120,45 @@ class GameView(ctk.CTkFrame):
         self.delete_button.grid(
             row=2, column=1, sticky='se', padx=(10, 60), pady=(10, 40))
 
+        # --- Rename button ---
+        self.rename_button = ctk.CTkButton(
+            title_frame,
+            text='Rename',
+            width=30,
+            state='disabled',
+            command=self.rename
+        )
+        self.rename_button.grid(row=0, column=1, sticky='w', padx=(10, 0))
+
     def rename(self) -> None:
         print('Rename')
 
-    def load(self) -> None:
-        print('Load')
+    def load(self, project_file: dict) -> None:
+        """ Gets data from the project file, updates page. """
+
+        # Update title
+        self.project_title.configure(text=project_file['project_name'])
+
+        # Update author
+        self.author.delete(0, 'end')
+        self.author.insert(0, project_file['author'])
+
+        # Update resolution
+        resolution = (f'{project_file['properties']['resolution'][0]} x '
+                      f'{project_file['properties']['resolution'][1]}')
+        self.resolution.delete(0, 'end')
+        self.resolution.insert(0, resolution)
+
+        # Update fullscreen
+        if project_file['properties']['fullscreen']:
+            self.fullscreen.select()
+
+        # Update gravity
+        if project_file['properties']['gravity']:
+            self.gravity.select()
+
+        # Update game type
+        self.game_type.set(project_file['properties']['game_type'])
 
     def save(self) -> None:
         print('Save')

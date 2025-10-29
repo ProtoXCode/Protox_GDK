@@ -39,7 +39,7 @@ class ProjectEditor(ctk.CTkFrame):
 
         # --- Subviews ---
         self.views = {
-            'game': GameView(self.content_frame),
+            'game': GameView(self.content_frame, main_app=self.main_app),
             'keybindings': KeybindingsView(self.content_frame)
         }
 
