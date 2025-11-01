@@ -1,6 +1,5 @@
 import logging
 import json
-import re
 from pathlib import Path
 from tkinter import messagebox
 
@@ -8,6 +7,7 @@ import customtkinter as ctk
 
 from .project_core import ProjectDoc
 from .view_game import GameView
+from gdk.utils import get_project_name, slugify
 
 
 class ProjectLoader:
@@ -47,12 +47,12 @@ class ProjectLoader:
 
     def create_project(self) -> None:
         """ Create a new project folder and base JSON file. """
-        name = self._get_project_name()
+        name = get_project_name()
         if len(name) == 0:
             return
 
         project_root = Path(__file__).parent.parent.parent / 'projects'
-        root = name.replace(' ', '_').lower()
+        root = slugify(name)
         project_dir = project_root / root
 
         #  --- Create project folder structure --------------------------------
@@ -80,31 +80,6 @@ class ProjectLoader:
         )
 
         self.scan_projects()
-
-    @staticmethod
-    def _get_project_name() -> str:
-        """ Asks user for a project name using standard characters. """
-        while True:
-            project = ctk.CTkInputDialog(
-                text='Select a project name',
-                title='Create new Project'
-            )
-
-            name = project.get_input()
-
-            if not name:
-                return ''
-
-            # Allow letters, digits, spaces, underscores and dashes
-            if re.match(r'^[\w\s-]+$', name):
-                return name.strip()
-
-            illegal_chars = sorted(set(re.sub(r'[\w\s-]', '', name)))
-            messagebox.showerror(
-                title='Illegal Project Name',
-                message='Project name contains illegal characters:\n'
-                        f'{', '.join(illegal_chars)}'
-            )
 
     def scan_projects(self) -> None:
         """ Scan the projects folder and create project buttons. """
@@ -146,8 +121,7 @@ class ProjectLoader:
         if not project_file.exists():
             messagebox.showerror(
                 title='Error',
-                message=f'Missing project.json in selected project folder.'
-            )
+                message=f'Missing project.json in selected project folder.')
             return
 
         game_view: GameView = self.controller.views['game']
@@ -169,7 +143,7 @@ class ProjectLoader:
             data = json.load(f)
 
         # Populate data
-        game_view.load(data)
+        game_view.load(project_file=data, project_path=project_path)
 
         project_name = data.get('project_name', project_path.name)
         logging.info(f'Loaded project: {project_name}')

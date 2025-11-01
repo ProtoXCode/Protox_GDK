@@ -1,6 +1,13 @@
+import logging
+import shutil
+import json
+import os
 from pathlib import Path
+from tkinter import messagebox
 
 import customtkinter as ctk
+
+from gdk.utils import get_project_name, slugify
 
 
 class GameView(ctk.CTkFrame):
@@ -8,7 +15,8 @@ class GameView(ctk.CTkFrame):
 
     def __init__(self, parent, main_app=None) -> None:
         super().__init__(parent)
-        self.project_path: Path | None = None
+        self.project_dir: Path | None = None
+        self.project_manager = None
         self.main_app = main_app
         self.config = main_app.config if main_app else {}
 
@@ -131,9 +139,55 @@ class GameView(ctk.CTkFrame):
         self.rename_button.grid(row=0, column=1, sticky='w', padx=(10, 0))
 
     def rename(self) -> None:
-        print('Rename')
+        """ Renames the project title, updates the project file and folder. """
+        if self.project_dir is None:
+            logging.error('No project loaded')
+            return
 
-    def load(self, project_file: dict) -> None:
+        new_display_name = get_project_name()
+        if len(new_display_name) == 0:
+            return
+
+        parent = self.project_dir.parent
+        new_dir = parent / slugify(new_display_name)
+
+        if new_dir == self.project_dir:
+            self.project_title.configure(text=new_display_name)
+            self.save()
+            return
+
+        if new_dir.exists():
+            messagebox.showerror(
+                title='Rename',
+                message=f'Project {new_display_name} already exists.')
+
+        try:
+            # Move/rename the directory
+            os.rename(self.project_dir, new_dir)
+            self.project_dir = new_dir
+
+            # Update display label
+            self.project_title.configure(text=new_display_name)
+
+            # Persist new project_name to JSON
+            self.save()
+
+            # Refresh project list in the sidebar submenu
+            if getattr(self, 'project_manager', None):
+                self.project_manager.scan_projects()
+
+            logging.info(
+                f'Renamed project to {new_display_name} -> {new_dir.name}')
+            messagebox.showinfo(
+                title='Renamed',
+                message=f'Project renamed to {new_display_name}')
+
+        except Exception as e:
+            logging.error(f'Error renaming project: {e}')
+            messagebox.showerror(title='Error',
+                                 message=f'Error renaming project: {e}')
+
+    def load(self, project_file: dict, project_path: Path) -> None:
         """ Gets data from the project file, updates page. """
 
         # Update title
@@ -160,8 +214,90 @@ class GameView(ctk.CTkFrame):
         # Update game type
         self.game_type.set(project_file['properties']['game_type'])
 
+        # Set path
+        self.project_dir = project_path
+
     def save(self) -> None:
-        print('Save')
+        if self.project_dir is None:
+            logging.error('No project loaded')
+            return
+
+        project_file = self.project_dir / 'project.json'
+
+        # Gather data from the input fields
+        project_data = {
+            'project_name': self.project_title.cget('text'),
+            'author': self.author.get(),
+            'properties': {
+                'resolution': tuple(
+                    map(int, self.resolution.get().split(' x '))),
+                'fullscreen': self.fullscreen.get() == 1,
+                'gravity': self.gravity.get() == 1,
+                'game_type': self.game_type.get()
+            }
+        }
+
+        try:
+            with open(project_file, 'w', encoding='utf-8') as f:
+                json.dump(project_data, f, indent=4)
+            logging.info(f'Project saved to {project_file}')
+        except Exception as e:
+            logging.error(f'Error saving project: {e}')
+            messagebox.showerror(title='Error',
+                                 message=f'Failed to save project:\n{e}')
 
     def delete(self) -> None:
-        print('Delete')
+        if self.project_dir is None:
+            logging.error('No project loaded')
+            messagebox.showwarning(
+                title='No Project', message='No project is currently loaded')
+            return
+
+        project_name = self.project_title.cget('text')
+        confirmation = messagebox.askyesno(
+            title='Confirm Deletion',
+            message=(
+                f'Are you sure you want to permanently delete project:\n'
+                f"🗑  {project_name}\n\n"
+                f"Path: {self.project_dir}"))
+
+        if not confirmation:
+            return
+
+        # Delete the project folder and its contents recursively
+        try:
+            shutil.rmtree(self.project_dir)
+            logging.info(f'Project deleted: {self.project_dir}')
+
+            # --- Refresh project list ---
+            if getattr(self, 'project_manager', None):
+                self.project_manager.scan_projects()
+
+            # --- Reset GUI state ---
+            self.project_dir = None
+            self.project_title.configure(text='No project loaded')
+
+            for entry in (self.author, self.resolution):
+                entry.configure(state='normal')
+                entry.delete(0, 'end')
+                entry.insert(
+                    0, 'Unknown' if entry is self.author else '800 x 600')
+                entry.configure(state='disabled')
+
+            for checkbox in (self.fullscreen, self.gravity):
+                checkbox.deselect()
+                checkbox.configure(state='disabled')
+
+            self.game_type.set(self.game_types[0])
+            self.save_button.configure(state='disabled')
+            self.delete_button.configure(state='disabled')
+            self.rename_button.configure(state='disabled')
+
+            messagebox.showinfo(
+                title='Project Deleted',
+                message=f'Project "{project_name}" was deleted successfully.')
+
+        except Exception as e:
+            logging.error(f'Error deleting project: {e}')
+            messagebox.showerror(title='Error',
+                                 message=f'Error deleting project:\n{e}')

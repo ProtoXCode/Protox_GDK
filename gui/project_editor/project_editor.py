@@ -14,6 +14,7 @@ class ProjectEditor(ctk.CTkFrame):
     def __init__(self, parent, main_app=None):
         super().__init__(parent)
         self.main_app = main_app
+        self.project_manager = ProjectLoader(self)
 
         # --- Layout setup ---
         self.grid_rowconfigure(1, weight=1)
@@ -43,6 +44,8 @@ class ProjectEditor(ctk.CTkFrame):
             'keybindings': KeybindingsView(self.content_frame)
         }
 
+        self.views['game'].project_manager = self.project_manager
+
         for v in self.views.values():
             v.grid(row=0, column=0, sticky='nsew', padx=8, pady=8)
 
@@ -64,5 +67,4 @@ class ProjectEditor(ctk.CTkFrame):
         return self.submenu.build(parent)
 
     def build_submenu(self, parent) -> ctk.CTkFrame:
-        submenu = ProjectLoader(self)
-        return submenu.build(parent)
+        return self.project_manager.build(parent)
