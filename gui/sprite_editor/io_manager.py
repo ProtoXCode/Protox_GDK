@@ -3,10 +3,10 @@ from __future__ import annotations
 import json
 import logging
 import re
+import threading
 from pathlib import Path
 from tkinter.filedialog import askopenfilename, asksaveasfilename
 from typing import Any
-import threading
 
 import customtkinter as ctk
 from PIL import Image
@@ -18,10 +18,33 @@ from gdk.palette import PALETTES
 class SpriteIOManager:
     """Handles persistence and external image import/export for sprites."""
 
-    def __init__(self, editor: "SpriteEditor") -> None:
+    def __init__(self, editor: 'SpriteEditor') -> None:
         self.editor = editor
 
-    # --- Core document operations --------------------------------------------
+    # --- Directory resolution helpers ----------------------------------------
+
+    @property
+    def default_sprite_dir(self) -> Path:
+        """
+        Returns the default directory for sprite I/O based on the
+        currently loaded project (if available).
+        """
+        try:
+            main_app = getattr(self.editor, 'main_app', None)
+            if main_app and getattr(main_app, 'active_project_path', None):
+                project_path = Path(main_app.active_project_path)
+                sprite_dir = project_path / "sprites"
+                sprite_dir.mkdir(exist_ok=True)
+                return sprite_dir
+        except Exception as e:
+            logging.debug(f"Failed to resolve project sprite dir: {e}")
+
+        # fallback if project not loaded
+        return Path.cwd() / "projects"
+
+    # -------------------------------------------------------------------------
+    # Core document operations
+    # -------------------------------------------------------------------------
 
     def new_doc(self) -> None:
         current_palette_name = self.editor.palette_var.get()
@@ -38,10 +61,11 @@ class SpriteIOManager:
         self.editor.palette_var.set(current_palette_name)
 
     def open_doc(self) -> None:
-        """ Open a saved sprite JSON and restore its palette and metadata """
+        """Open a saved sprite JSON and restore its palette and metadata."""
         path = askopenfilename(
             title='Open Sprite JSON',
             filetypes=[('Sprite JSON', '*.json'), ('All Files', '*.*')],
+            initialdir=self.default_sprite_dir
         )
         if not path:
             return
@@ -66,7 +90,7 @@ class SpriteIOManager:
         logging.info(f'Loaded sprite: {path}')
 
     def save_doc(self) -> None:
-        """ Save the current sprite to disk (or trigger Save As) """
+        """Save the current sprite to disk (or trigger Save As)."""
         if self.editor.last_saved_path is None:
             self.save_as_doc()
             return
@@ -90,25 +114,29 @@ class SpriteIOManager:
         logging.info(f'Saved sprite: {self.editor.last_saved_path}')
 
     def save_as_doc(self) -> None:
-        """ Save the sprite with a new file name """
+        """Save the sprite with a new file name."""
         path = asksaveasfilename(
             title='Save Sprite JSON',
             defaultextension='.json',
             filetypes=[('Sprite JSON', '*.json'), ('All Files', '*.*')],
+            initialdir=self.default_sprite_dir
         )
         if not path:
             return
         self.editor.last_saved_path = Path(path)
         self.save_doc()
 
-    # --- Export operations ---------------------------------------------------
+    # ----------------------------------------------------------------------
+    # 🔹 Export operations
+    # ----------------------------------------------------------------------
 
     def export_png(self) -> None:
-        """ Export the current frame as a PNG image """
+        """Export the current frame as a PNG image."""
         path = asksaveasfilename(
             title='Export PNG (current frame)',
             defaultextension='.png',
             filetypes=[('PNG image', '*.png'), ('All Files', '*.*')],
+            initialdir=self.default_sprite_dir
         )
         if not path:
             return
@@ -119,17 +147,18 @@ class SpriteIOManager:
         logging.info(f'Exported PNG to: {path}')
 
     def export_gif(self) -> None:
-        """ Export the current frame as a GIF image """
+        """Export the current frame as a GIF image."""
         path = asksaveasfilename(
             title='Export GIF (animated gif)',
             defaultextension='.gif',
             filetypes=[('GIF image', '*.gif'), ('All Files', '*.*')],
+            initialdir=self.default_sprite_dir
         )
         if not path:
             return
 
-        images = [self.editor.canvas_view.render_frame(i) for i in
-                  range(len(self.editor.doc.frames))]
+        images = [self.editor.canvas_view.render_frame(i)
+                  for i in range(len(self.editor.doc.frames))]
         frame_duration = max(1, self.editor.frame_time_var.get())
 
         images[0].save(
@@ -146,13 +175,12 @@ class SpriteIOManager:
     # --- Import image --------------------------------------------------------
 
     def import_image(self) -> None:
-        """
-        Import an external image file and quantize it to the current palette (threaded)
-        """
+        """Import an external image file and quantize it to the current palette (threaded)."""
         path = askopenfilename(
             title='Import sprite image',
             filetypes=[('Image files', '*.png;*.jpg;*.jpeg;*.bmp'),
-                       ('All Files', '*.*')]
+                       ('All Files', '*.*')],
+            initialdir=self.default_sprite_dir
         )
         if not path:
             return
@@ -167,7 +195,6 @@ class SpriteIOManager:
             try:
                 img = Image.open(path).convert('RGBA')
                 width, height = img.size
-
                 pixels = img.load()
                 matrix = [[-1 for _ in range(width)] for _ in range(height)]
 
@@ -179,7 +206,7 @@ class SpriteIOManager:
                             continue
                         matrix[y][x] = self.find_closest_color((r, g, b, a))
 
-                # 🟢 Schedule the GUI updates back on the main thread
+                # 🟢 Apply result safely in main thread
                 def apply_result():
                     self.editor.resize_grid(width, height)
                     self.editor.doc.frames[
@@ -188,18 +215,16 @@ class SpriteIOManager:
                     busy_label.destroy()
                     self.editor.configure(cursor='')
 
-                # noinspection PyTypeChecker
-                self.editor.after(0, apply_result)
+                self.editor.after(0, apply_result)  # type: ignore[arg-type]
 
             except Exception as e:
                 logging.exception(e)
-                # noinspection PyTypeChecker
                 self.editor.after(0, lambda: busy_label.configure(
-                    text=f'Error: {e}', text_color='red'))
+                    text=f'Error: {e}',
+                    text_color='red'))  # type: ignore[arg-type]
             finally:
-                # ensure cursor reset if apply_result wasn’t reached
-                # noinspection PyTypeChecker
-                self.editor.after(0, lambda: self.editor.configure(cursor=''))
+                self.editor.after(0, lambda: self.editor.configure(
+                    cursor=''))  # type: ignore[arg-type]
 
         threading.Thread(target=worker, daemon=True).start()
         logging.info(f'Imported image into current frame: {path}')
@@ -207,7 +232,7 @@ class SpriteIOManager:
     # --- Color quantization --------------------------------------------------
 
     def find_closest_color(self, rgba: tuple[Any, ...]) -> int:
-        """ Find the nearest color index in the active palette """
+        """Find the nearest color index in the active palette."""
         r1, g1, b1, a1 = rgba
         if a1 < 32:
             return -1  # transparent
@@ -216,7 +241,6 @@ class SpriteIOManager:
         best_dist = float('inf')
 
         for i, (r2, g2, b2, _a2) in enumerate(self.editor.doc.palette):
-            # Basic weighted Euclidean distance (good balance)
             dr = r1 - r2
             dg = g1 - g2
             db = b1 - b2

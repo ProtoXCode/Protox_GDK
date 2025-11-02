@@ -145,5 +145,8 @@ class ProjectLoader:
         # Populate data
         game_view.load(project_file=data, project_path=project_path)
 
+        # Set default file path
+        self.controller.main_app.active_project_path = project_path
+
         project_name = data.get('project_name', project_path.name)
         logging.info(f'Loaded project: {project_name}')

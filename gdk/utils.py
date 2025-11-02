@@ -1,7 +1,38 @@
+import logging
+import json
 import re
+import os
 from tkinter import messagebox
+from pathlib import Path
 
 import customtkinter as ctk
+
+
+def load_config() -> dict:
+    """ Load the config file, creates a new default one if it doesn't exist """
+
+    config_file = os.path.join(os.path.dirname(__file__), 'config.json')
+
+    try:
+        with open(config_file, encoding='utf-8', mode='r') as json_data:
+            config = json.load(json_data)
+
+    except FileNotFoundError:
+        config = {'app_width': 1575,
+                  'app_height': 825,
+                  'fullscreen': False,
+                  'fade_in': True,
+                  'game_types': [
+                      'Platformer',
+                      'RPG',
+                      'Fighter',
+                      'Shooter'
+                  ]}
+        with open(config_file, encoding='utf-8', mode='w') as json_data:
+            json.dump(config, json_data, indent=4)
+        logging.info('Default config file created')
+
+    return config
 
 
 def rgba_hex(rgba: list[int]) -> str:
@@ -38,3 +69,15 @@ def get_project_name() -> str:
 def slugify(name: str) -> str:
     """ Folder safe name (spaces to _, lowercase; keep letters/digits/_/- """
     return re.sub(r'[^a-z0-9_-]', '', name.replace(' ', '_').lower())
+
+
+def get_project_subdir(main_app, sub: str) -> Path:
+    try:
+        base = main_app.active_project_path
+        if base:
+            target = base / sub
+            target.mkdir(exist_ok=True)
+            return target
+    except Exception as e:
+        logging.error(f'Error getting subdir for {sub}: {e}')
+    return Path.cwd() / 'projects' / sub

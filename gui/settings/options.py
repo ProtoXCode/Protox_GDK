@@ -6,7 +6,7 @@ from tkinter import messagebox
 
 import customtkinter as ctk
 
-from gdk.config_loader import load_config
+from gdk.utils import load_config
 
 
 class OptionsView(ctk.CTkFrame):

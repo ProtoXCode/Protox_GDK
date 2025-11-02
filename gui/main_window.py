@@ -1,12 +1,13 @@
 import platform
 import logging
+from pathlib import Path
 
 import customtkinter as ctk
 from PIL import Image
 
 from gdk import __name__, __version__
 from gdk.protox_tools import ProtoXToolKit
-from gdk.config_loader import load_config
+from gdk.utils import load_config
 from gui.project_editor import ProjectEditor
 from gui.settings import SettingsEditor
 from gui.sprite_editor import SpriteEditor
@@ -24,6 +25,7 @@ class GDKMain:
         self.menu_width = 300
         self.top_menu_height = 410
         self.started = False
+        self.active_project_path: Path | None = None
 
         self.root.attributes('-fullscreen', self.config['fullscreen'])
 
