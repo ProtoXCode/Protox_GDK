@@ -1,3 +1,5 @@
+import time
+
 import customtkinter as ctk
 import pytest
 
@@ -6,6 +8,7 @@ from gui.main_window import GDKMain
 
 @pytest.fixture
 def app():
+    time.sleep(0.05)
     root = ctk.CTk()
     app = GDKMain(root)
     yield app

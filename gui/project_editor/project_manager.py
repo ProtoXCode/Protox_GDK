@@ -34,6 +34,7 @@ class ProjectLoader:
         ).grid(row=1, column=0, sticky='ew', padx=40, pady=20)
 
         # --- Container for dynamic project buttons ---------------------------
+
         self.projects_frame = ctk.CTkFrame(sub_menu)
         self.projects_frame.grid(
             row=2, column=0, sticky='nsew', padx=4, pady=4)
@@ -56,6 +57,7 @@ class ProjectLoader:
         project_dir = project_root / root
 
         #  --- Create project folder structure --------------------------------
+
         try:
             project_dir.mkdir(parents=True, exist_ok=True)
             (project_dir / 'sprites').mkdir()
@@ -67,6 +69,7 @@ class ProjectLoader:
             logging.error(f'Project directory "{root}" already exists')
 
         # --- Create and save the project.json file ---------------------------
+
         project_doc = ProjectDoc.new(name)
         project_file = project_dir / 'project.json'
 
@@ -147,6 +150,15 @@ class ProjectLoader:
 
         # Set default file path
         self.controller.main_app.active_project_path = project_path
+
+        try:
+            io_manager = self.controller.views['sprite'].io_manager
+            io_manager._last_open_dir = None
+            io_manager._last_save_dir = None
+            io_manager._last_import_dir = None
+            io_manager._last_export_dir = None
+        except Exception as e:
+            logging.debug(f'Failed to load sprite:\n{e}')
 
         project_name = data.get('project_name', project_path.name)
         logging.info(f'Loaded project: {project_name}')

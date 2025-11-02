@@ -81,3 +81,11 @@ def get_project_subdir(main_app, sub: str) -> Path:
     except Exception as e:
         logging.error(f'Error getting subdir for {sub}: {e}')
     return Path.cwd() / 'projects' / sub
+
+
+def normalize_path(path: str | Path) -> str:
+    """ Return a consistent, forward-slash path string. """
+    try:
+        return Path(path).resolve().as_posix()
+    except Exception:
+        return str(path).replace('\\', '/')

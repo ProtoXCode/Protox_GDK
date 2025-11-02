@@ -13,6 +13,7 @@ from PIL import Image
 
 from .sprite_core import SpriteDoc
 from gdk.palette import PALETTES
+from gdk.utils import normalize_path
 
 
 class SpriteIOManager:
@@ -21,30 +22,32 @@ class SpriteIOManager:
     def __init__(self, editor: 'SpriteEditor') -> None:
         self.editor = editor
 
-    # --- Directory resolution helpers ----------------------------------------
+        # Remember last used directories between calls
+        self._last_open_dir: Path | None = None
+        self._last_save_dir: Path | None = None
+        self._last_import_dir: Path | None = None
+        self._last_export_dir: Path | None = None
 
-    @property
-    def default_sprite_dir(self) -> Path:
-        """
-        Returns the default directory for sprite I/O based on the
-        currently loaded project (if available).
-        """
+    # --- Directory resolution ------------------------------------------------
+
+    def _resolve_dir(self, last_dir: Path | None) -> Path:
+        """Return the best starting directory for a dialog."""
+        if last_dir and last_dir.exists():
+            return last_dir
+
         try:
             main_app = getattr(self.editor, 'main_app', None)
             if main_app and getattr(main_app, 'active_project_path', None):
-                project_path = Path(main_app.active_project_path)
-                sprite_dir = project_path / "sprites"
+                sprite_dir = Path(main_app.active_project_path) / 'sprites'
                 sprite_dir.mkdir(exist_ok=True)
                 return sprite_dir
         except Exception as e:
-            logging.debug(f"Failed to resolve project sprite dir: {e}")
+            logging.debug(f'Failed to resolve project sprite dir: {e}')
 
-        # fallback if project not loaded
-        return Path.cwd() / "projects"
+        # Fallback
+        return Path.cwd() / 'projects'
 
-    # -------------------------------------------------------------------------
-    # Core document operations
-    # -------------------------------------------------------------------------
+    # --- Core document operations --------------------------------------------
 
     def new_doc(self) -> None:
         current_palette_name = self.editor.palette_var.get()
@@ -61,14 +64,16 @@ class SpriteIOManager:
         self.editor.palette_var.set(current_palette_name)
 
     def open_doc(self) -> None:
-        """Open a saved sprite JSON and restore its palette and metadata."""
+        """ Open a saved sprite JSON and restore its palette and metadata. """
         path = askopenfilename(
             title='Open Sprite JSON',
             filetypes=[('Sprite JSON', '*.json'), ('All Files', '*.*')],
-            initialdir=self.default_sprite_dir
+            initialdir=self._resolve_dir(self._last_open_dir)
         )
         if not path:
             return
+
+        self._last_open_dir = Path(path).parent
 
         with open(path, 'r', encoding='utf-8') as handle:
             data = json.load(handle)
@@ -111,7 +116,8 @@ class SpriteIOManager:
                   encoding='utf-8') as handle:
             handle.write(text)
 
-        logging.info(f'Saved sprite: {self.editor.last_saved_path}')
+        logging.info(
+            f'Saved sprite: {normalize_path(self.editor.last_saved_path)}')
 
     def save_as_doc(self) -> None:
         """Save the sprite with a new file name."""
@@ -119,16 +125,16 @@ class SpriteIOManager:
             title='Save Sprite JSON',
             defaultextension='.json',
             filetypes=[('Sprite JSON', '*.json'), ('All Files', '*.*')],
-            initialdir=self.default_sprite_dir
+            initialdir=self._resolve_dir(self._last_save_dir)
         )
         if not path:
             return
-        self.editor.last_saved_path = Path(path)
+
+        self.editor.last_save_dir = Path(path).parent
+
         self.save_doc()
 
-    # ----------------------------------------------------------------------
-    # 🔹 Export operations
-    # ----------------------------------------------------------------------
+    # --- Export operations ------------------------------------------------
 
     def export_png(self) -> None:
         """Export the current frame as a PNG image."""
@@ -136,15 +142,17 @@ class SpriteIOManager:
             title='Export PNG (current frame)',
             defaultextension='.png',
             filetypes=[('PNG image', '*.png'), ('All Files', '*.*')],
-            initialdir=self.default_sprite_dir
+            initialdir=self._resolve_dir(self._last_export_dir)
         )
         if not path:
             return
 
+        self._last_export_dir = Path(path).parent
+
         img = self.editor.canvas_view.render_frame(
             self.editor.active_frame, scale=1)
         img.save(path, 'PNG')
-        logging.info(f'Exported PNG to: {path}')
+        logging.info(f'Exported PNG to: {normalize_path(path)}')
 
     def export_gif(self) -> None:
         """Export the current frame as a GIF image."""
@@ -152,10 +160,12 @@ class SpriteIOManager:
             title='Export GIF (animated gif)',
             defaultextension='.gif',
             filetypes=[('GIF image', '*.gif'), ('All Files', '*.*')],
-            initialdir=self.default_sprite_dir
+            initialdir=self._resolve_dir(self._last_export_dir)
         )
         if not path:
             return
+
+        self._last_export_dir = Path(path).parent
 
         images = [self.editor.canvas_view.render_frame(i)
                   for i in range(len(self.editor.doc.frames))]
@@ -170,7 +180,7 @@ class SpriteIOManager:
             disposal=2,
             transparency=0
         )
-        logging.info(f'Exported GIF to: {path}')
+        logging.info(f'Exported GIF to: {normalize_path(path)}')
 
     # --- Import image --------------------------------------------------------
 
@@ -180,10 +190,12 @@ class SpriteIOManager:
             title='Import sprite image',
             filetypes=[('Image files', '*.png;*.jpg;*.jpeg;*.bmp'),
                        ('All Files', '*.*')],
-            initialdir=self.default_sprite_dir
+            initialdir=self._resolve_dir(self._last_import_dir)
         )
         if not path:
             return
+
+        self._last_import_dir = Path(path).parent
 
         busy_label = ctk.CTkLabel(self.editor, text='  Importing...  ',
                                   text_color='orange')
@@ -227,7 +239,8 @@ class SpriteIOManager:
                     cursor=''))  # type: ignore[arg-type]
 
         threading.Thread(target=worker, daemon=True).start()
-        logging.info(f'Imported image into current frame: {path}')
+        logging.info(
+            f'Imported image into current frame: {normalize_path(path)}')
 
     # --- Color quantization --------------------------------------------------
 
