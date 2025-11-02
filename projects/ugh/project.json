@@ -1,0 +1,13 @@
+{
+    "project_name": "UGH",
+    "author": "ProtoX",
+    "properties": {
+        "resolution": [
+            800,
+            600
+        ],
+        "fullscreen": false,
+        "gravity": true,
+        "game_type": "Platformer"
+    }
+}
