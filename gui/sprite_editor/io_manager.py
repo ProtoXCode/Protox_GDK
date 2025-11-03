@@ -27,22 +27,39 @@ class SpriteIOManager:
         self._last_save_dir: Path | None = None
         self._last_import_dir: Path | None = None
         self._last_export_dir: Path | None = None
+        self._last_project_root: Path | None = None
 
     # --- Directory resolution ------------------------------------------------
 
     def _resolve_dir(self, last_dir: Path | None) -> Path:
         """Return the best starting directory for a dialog."""
+
+        controller = getattr(self.editor, 'controller', None)
+        main_app = (getattr(controller, 'main_app', None) or
+                    getattr(self.editor, 'main_app', None))
+        active_root = None
+
+        if main_app and getattr(main_app, 'active_project_path', None):
+            active_root = main_app.active_project_path
+
+        # If project changed since last call -> nuke remebered dirs
+        if active_root is not None and active_root != self._last_project_root:
+            self._last_project_root = active_root
+            self._last_open_dir = None
+            self._last_save_dir = None
+            self._last_import_dir = None
+            self._last_export_dir = None
+            last_dir = None
+
+        # Use last dir if valid
         if last_dir and last_dir.exists():
             return last_dir
 
-        try:
-            main_app = getattr(self.editor, 'main_app', None)
-            if main_app and getattr(main_app, 'active_project_path', None):
-                sprite_dir = Path(main_app.active_project_path) / 'sprites'
-                sprite_dir.mkdir(exist_ok=True)
-                return sprite_dir
-        except Exception as e:
-            logging.debug(f'Failed to resolve project sprite dir: {e}')
+        # Else default to current project's sprites/
+        if active_root is not None:
+            sprite_dir = active_root / 'sprites'
+            sprite_dir.mkdir(exist_ok=True)
+            return sprite_dir
 
         # Fallback
         return Path.cwd() / 'projects'
@@ -130,7 +147,9 @@ class SpriteIOManager:
         if not path:
             return
 
-        self.editor.last_save_dir = Path(path).parent
+        path = Path(path)
+        self._last_save_dir = path.parent
+        self.editor.last_saved_path = path
 
         self.save_doc()
 
